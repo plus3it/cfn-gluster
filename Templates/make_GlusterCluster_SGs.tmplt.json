@@ -1,0 +1,40 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Template for creating Security groups used to support a Gluster cluster",
+  "Mappings": {},
+  "Conditions": {},
+  "Outputs": {
+    "NasSg": {
+      "Description": "EC2-to-NAS Security Group",
+      "Value": { "Ref": "NasSg" }
+    }
+  },
+  "Parameters": {
+    "TargetVPC": {
+      "AllowedPattern": "^vpc-[0-9a-f]*$",
+      "Description": "ID of the VPC to deploy Confluence components into.",
+      "Type": "AWS::EC2::VPC::Id"
+    }
+  },
+  "Resources": {
+    "NasSg": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "EC2-to-Storage Security Group",
+        "Tags": [ { "Key": "Name", "Value": "Confluence EC2/Storage Security Group" } ],
+        "VpcId": { "Ref": "TargetVPC" }
+      }
+    },
+    "UpdateNasSg": {
+      "DependsOn": "NasSg",
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": { "Ref": "NasSg" },
+        "SourceSecurityGroupId": { "Ref": "NasSg" },
+        "IpProtocol": "tcp",
+        "FromPort": "0",
+        "ToPort": "65535"
+      }
+    }
+  }
+}

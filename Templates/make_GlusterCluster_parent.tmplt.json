@@ -1,0 +1,233 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "This template stands up a basic, 2-node GlusterFs mirrored cluster and associated SG and EC2 components.",
+  "Metadata": {},
+  "Outputs": {},
+  "Parameters": {
+    "AmiId": {
+      "AllowedPattern": "^ami-[0-9a-z]{8}$|^ami-[0-9a-z]{17}$",
+      "Description": "ID of the AMI to launch",
+      "Type": "String"
+    },
+    "CfnEndpointUrl": {
+      "AllowedPattern": "^$|^http://.*$|^https://.*$",
+      "Default": "",
+      "Description": "URL to the CloudFormation Endpoint. e.g. https://cloudformation.us-east-1.amazonaws.com",
+      "Type": "String"
+    },
+    "ClusterInstanceType": {
+      "AllowedValues": [
+        "t2.micro",
+        "t2.small",
+        "t2.medium",
+        "t2.large",
+        "t2.xlarge",
+        "t2.2xlarge",
+        "m3.medium",
+        "m3.large",
+        "m3.xlarge",
+        "m3.2xlarge",
+        "m4.large",
+        "m4.xlarge",
+        "m4.2xlarge",
+        "m4.4xlarge",
+        "m4.10xlarge",
+        "m4.16xlarge"
+      ],
+      "Default": "t2.large",
+      "Description": "Amazon Linux AMI instance type: https://aws.amazon.com/ec2/instance-types/",
+      "Type": "String"
+    },
+    "ConsumerApplication": {
+      "Description": "Name of the application that the cluster is hosting data for.",
+      "Type": "String"
+    },
+    "EpelRepo": {
+      "AllowedPattern": "^[a-z][a-z0-9-]*$",
+      "ConstraintDescription": "An alphanumeric string that represents the EPEL yum repo's label.",
+      "Default": "epel",
+      "Description": "Name of network's EPEL repo.",
+      "Type": "String"
+    },
+    "GlusDomName": {
+      "Description": "FQDN to be applied to Gluster member-nodes.",
+      "Type": "String"
+    },
+    "GlusNodeName": {
+      "Description": "Base node-name to derive individual Gluster node-names.",
+      "Type": "String"
+    },
+    "GlusNodeTemplateUri": {
+      "AllowedPattern": "^$|^http://.*$|^https://.*$",
+      "Description": "URI for the template that creates Gluster's EC2 node-components.",
+      "Type": "String"
+    },
+    "GlusterGfsScript": {
+      "AllowedPattern": "^$|^http://.*$|^https://.*$",
+      "Description": "URL to script that configures a Gluster filesystem.",
+      "Type": "String"
+    },
+    "GlusterOsprepScript": {
+      "AllowedPattern": "^$|^http://.*$|^https://.*$",
+      "Description": "URL to script that prepares the EC2 instance's host OS for hosting a Gluster filesystem.",
+      "Type": "String"
+    },
+    "GlusterSubnets": {
+      "Description": "List of subnets to deploy Gluster instances into.",
+      "Type": "List<AWS::EC2::Subnet::Id>"
+    },
+    "InstanceProfile": {
+      "Description": "IAM instance profile to apply to the instance(s)",
+      "Type": "String"
+    },
+    "KeyPairName": {
+      "ConstraintDescription": "Name can contain only ASCII characters.",
+      "Description": "Name of an existing EC2 KeyPair: https://console.aws.amazon.com/ec2/v2/home#KeyPairs:",
+      "Type": "AWS::EC2::KeyPair::KeyName"
+    },
+    "PipRpm": {
+      "Default": "python2-pip",
+      "Description": "Name of preferred pip RPM.",
+      "Type": "String"
+    },
+    "PyStache": {
+      "Default": "pystache",
+      "Description": "Name of preferred pystache RPM.",
+      "Type": "String"
+    },
+    "SgTemplateUri": {
+      "AllowedPattern": "^$|^http://.*$|^https://.*$",
+      "Description": "URI for the template that creates Gluster's SecurityGroup components.",
+      "Type": "String"
+    },
+    "ShareVolDev": {
+      "AllowedValues": [
+        "/dev/xvdf",
+        "/dev/xvdg",
+        "/dev/xvdh",
+        "/dev/xvdi",
+        "/dev/xvdj"
+      ],
+      "Default": "/dev/xvdf",
+      "Description": "Device to mount as Gluster's shared-storage",
+      "Type": "String"
+    },
+    "ShareVolSize": {
+      "ConstraintDescription": "Must be between 1GB and 16384GB.",
+      "Default": "20",
+      "Description": "Size in GB of the EBS volume to create.",
+      "MaxValue": "16384",
+      "MinValue": "20",
+      "Type": "Number"
+    },
+    "ShareVolType": {
+      "AllowedValues": [
+        "gp2",
+        "io1",
+        "sc1",
+        "st1",
+        "standard"
+      ],
+      "Default": "gp2",
+      "Description": "Type of EBS volume to create for shared storage.",
+      "Type": "String"
+    },
+    "TargetVPC": {
+      "AllowedPattern": "^vpc-[0-9a-f]*$",
+      "Description": "ID of the VPC to deploy Confluence components into.",
+      "Type": "AWS::EC2::VPC::Id"
+    }
+  },
+  "Resources": {
+    "GfsN0Res": {
+      "Properties": {
+        "Parameters": {
+          "AmiId": { "Ref": "AmiId" },
+          "CfnEndpointUrl": { "Ref": "CfnEndpointUrl" },
+          "ClusterInstanceType": { "Ref": "ClusterInstanceType" },
+          "ClusterSecurityGroup": {
+            "Fn::Join": [
+              ",",
+              [
+                { "Fn::GetAtt": [ "SgRes", "Outputs.NasSg" ] }
+              ]
+            ]
+          },
+          "ConsumerApplication": { "Ref": "ConsumerApplication" },
+          "EpelRepo": { "Ref": "EpelRepo" },
+          "GlusDomName": { "Ref": "GlusDomName" },
+          "GlusNodeName": { "Ref": "GlusNodeName" },
+          "GlusNodeNumber": "00",
+          "GlusterGfsScript": { "Ref": "GlusterGfsScript" },
+          "GlusterPartnerIp": "",
+          "GlusterOsprepScript": { "Ref": "GlusterOsprepScript" },
+          "GlusterSubnets": { "Fn::Select": [ "0", { "Ref": "GlusterSubnets" } ] },
+          "InstanceProfile": { "Ref": "InstanceProfile" },
+          "KeyPairName": { "Ref": "KeyPairName" },
+          "PipRpm": { "Ref": "PipRpm" },
+          "PyStache": { "Ref": "PyStache" },
+          "ShareVolDev": { "Ref": "ShareVolDev" },
+          "ShareVolSize": { "Ref": "ShareVolSize" },
+          "ShareVolType": { "Ref": "ShareVolType" }
+        },
+        "TemplateURL": { "Ref": "GlusNodeTemplateUri" }
+      },
+      "Type": "AWS::CloudFormation::Stack"
+    },
+    "GfsN1Res": {
+      "Properties": {
+        "Parameters": {
+          "AmiId": { "Ref": "AmiId" },
+          "CfnEndpointUrl": { "Ref": "CfnEndpointUrl" },
+          "ClusterInstanceType": { "Ref": "ClusterInstanceType" },
+          "ClusterSecurityGroup": {
+            "Fn::Join": [
+              ",",
+              [
+                { "Fn::GetAtt": [ "SgRes", "Outputs.NasSg" ] }
+              ]
+            ]
+          },
+          "ConsumerApplication": { "Ref": "ConsumerApplication" },
+          "EpelRepo": { "Ref": "EpelRepo" },
+          "GlusDomName": { "Ref": "GlusDomName" },
+          "GlusNodeName": { "Ref": "GlusNodeName" },
+          "GlusNodeNumber": "01",
+          "GlusterGfsScript": { "Ref": "GlusterGfsScript" },
+          "GlusterPartnerIp": {
+            "Fn::Join": [
+              ",",
+              [
+                { "Fn::GetAtt": [ "GfsN0Res", "Outputs.GfsNodeIp" ] }
+              ]
+            ]
+          },
+          "GlusterOsprepScript": { "Ref": "GlusterOsprepScript" },
+          "GlusterSubnets": { "Fn::Select": [ "1", { "Ref": "GlusterSubnets" } ] },
+          "InstanceProfile": { "Ref": "InstanceProfile" },
+          "KeyPairName": { "Ref": "KeyPairName" },
+          "PipRpm": { "Ref": "PipRpm" },
+          "PyStache": { "Ref": "PyStache" },
+          "ShareVolDev": { "Ref": "ShareVolDev" },
+          "ShareVolSize": { "Ref": "ShareVolSize" },
+          "ShareVolType": { "Ref": "ShareVolType" }
+        },
+        "TemplateURL": { "Ref": "GlusNodeTemplateUri" }
+      },
+      "Type": "AWS::CloudFormation::Stack"
+    },
+    "SgRes": {
+      "Properties": {
+        "Parameters": {
+          "TargetVPC": {
+            "Ref": "TargetVPC"
+          }
+        },
+        "TemplateURL": {
+          "Ref": "SgTemplateUri"
+        }
+      },
+      "Type": "AWS::CloudFormation::Stack"
+    }
+  }
+}
