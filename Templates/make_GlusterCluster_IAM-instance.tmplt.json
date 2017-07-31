@@ -1,0 +1,126 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Conditions": {
+    "DoBucketStuff": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            { "Ref": "BackupBucketArn" },
+            ""
+          ]
+        }
+      ]
+    }
+  },
+  "Description": "This template sets up the IAM role needed by an Gluster instance",
+  "Outputs": {
+    "InstanceRole": {
+      "Description": "Name of the instance role",
+      "Value": { "Ref": "InstanceRole" }
+    },
+    "InstanceRoleArn": {
+      "Description": "ARN of the instance role",
+      "Value": {
+        "Fn::GetAtt": [
+          "InstanceRole",
+          "Arn"
+        ]
+      }
+    },
+    "InstanceRoleProfile": {
+      "Description": "Profile of the instance role",
+      "Value": { "Ref": "InstanceProfile" }
+    }
+  },
+  "Parameters": {
+    "BackupBucketArn": {
+      "Description": "S3 Bucket to host Gluster backups",
+      "Type": "String"
+    }
+  },
+  "Resources": {
+    "InstancePolicy": {
+      "Properties": {
+        "Description": "Policy to provide instance-level access to needed AWS-level resources",
+        "Path": "/",
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Fn::If": [
+                "DoBucketStuff",
+                {
+                  "Action": [
+                    "s3:*"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": [
+                    {
+                      "Fn::Join": [
+                        "",
+                        [
+                          { "Ref": "BackupBucketArn" },
+                          ""
+                        ]
+                      ]
+                    },
+                    {
+                      "Fn::Join": [
+                        "",
+                        [
+                          { "Ref": "BackupBucketArn" },
+                          "/*"
+                        ]
+                      ]
+                    }
+                  ]
+                },
+                { "Ref": "AWS::NoValue" }
+              ]
+            },
+            {
+              "Action": [
+                "cloudformation:DescribeStackResource"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                "*"
+              ]
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Roles": [
+          { "Ref": "InstanceRole" }
+        ]
+      },
+      "Type": "AWS::IAM::ManagedPolicy"
+    },
+    "InstanceProfile": {
+      "Properties": {
+        "Path": "/",
+        "Roles": [
+          { "Ref": "InstanceRole" }
+        ]
+      },
+      "Type": "AWS::IAM::InstanceProfile"
+    },
+    "InstanceRole": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Path": "/"
+      },
+      "Type": "AWS::IAM::Role"
+    }
+  }
+}
