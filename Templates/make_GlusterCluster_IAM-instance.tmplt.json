@@ -36,6 +36,11 @@
     "BackupBucketArn": {
       "Description": "S3 Bucket to host Gluster backups",
       "Type": "String"
+    },
+    "ServiceTld": {
+      "Default": "amazonaws.com",
+      "Description": "TLD of the IAMable service-name.",
+      "Type": "String"
     }
   },
   "Resources": {
@@ -112,7 +117,15 @@
               "Action": "sts:AssumeRole",
               "Effect": "Allow",
               "Principal": {
-                "Service": "ec2.amazonaws.com"
+                "Service": {
+                  "Fn::Join": [
+                    ".",
+                    [
+                      "ec2",
+                      { "Ref": "ServiceTld" }
+                    ]
+                  ]
+                }
               }
             }
           ],
