@@ -9,6 +9,10 @@
       "Description": "ID of the AMI to launch",
       "Type": "String"
     },
+    "BackupBucketArn": {
+      "Description": "S3 Bucket to host Gluster backups",
+      "Type": "String"
+    },
     "CfnEndpointUrl": {
       "AllowedPattern": "^$|^http://.*$|^https://.*$",
       "Default": "",
@@ -76,8 +80,9 @@
       "Description": "List of subnets to deploy Gluster instances into.",
       "Type": "List<AWS::EC2::Subnet::Id>"
     },
-    "InstanceProfile": {
-      "Description": "IAM instance profile to apply to the instance(s)",
+    "IamTemplateUri": {
+      "AllowedPattern": "^$|^http://.*$|^https://.*$",
+      "Description": "URI for the template that creates Gluster's IAM components.",
       "Type": "String"
     },
     "KeyPairName": {
@@ -93,6 +98,11 @@
     "PyStache": {
       "Default": "pystache",
       "Description": "Name of preferred pystache RPM.",
+      "Type": "String"
+    },
+    "ServiceTld": {
+      "Default": "amazonaws.com",
+      "Description": "TLD of the IAMable service-name.",
       "Type": "String"
     },
     "SgTemplateUri": {
@@ -162,7 +172,14 @@
           "GlusterPartnerIp": "",
           "GlusterOsprepScript": { "Ref": "GlusterOsprepScript" },
           "GlusterSubnets": { "Fn::Select": [ "0", { "Ref": "GlusterSubnets" } ] },
-          "InstanceProfile": { "Ref": "InstanceProfile" },
+          "InstanceProfile": {
+            "Fn::Join": [
+              ",",
+              [
+                { "Fn::GetAtt": [ "IamRes", "Outputs.InstanceRoleArn" ] }
+              ]
+            ]
+          },
           "KeyPairName": { "Ref": "KeyPairName" },
           "PipRpm": { "Ref": "PipRpm" },
           "PyStache": { "Ref": "PyStache" },
@@ -204,7 +221,14 @@
           },
           "GlusterOsprepScript": { "Ref": "GlusterOsprepScript" },
           "GlusterSubnets": { "Fn::Select": [ "1", { "Ref": "GlusterSubnets" } ] },
-          "InstanceProfile": { "Ref": "InstanceProfile" },
+          "InstanceProfile": {
+            "Fn::Join": [
+              ",",
+              [
+                { "Fn::GetAtt": [ "IamRes", "Outputs.InstanceRoleArn" ] }
+              ]
+            ]
+          },
           "KeyPairName": { "Ref": "KeyPairName" },
           "PipRpm": { "Ref": "PipRpm" },
           "PyStache": { "Ref": "PyStache" },
@@ -213,6 +237,18 @@
           "ShareVolType": { "Ref": "ShareVolType" }
         },
         "TemplateURL": { "Ref": "GlusNodeTemplateUri" }
+      },
+      "Type": "AWS::CloudFormation::Stack"
+    },
+    "IamRes": {
+      "Properties": {
+        "Parameters": {
+          "BackupBucketArn": { "Ref": "BackupBucketArn" },
+          "ServiceTld": { "Ref": "ServiceTld" }
+        },
+        "TemplateURL": {
+          "Ref": "IamTemplateUri"
+        }
       },
       "Type": "AWS::CloudFormation::Stack"
     },
