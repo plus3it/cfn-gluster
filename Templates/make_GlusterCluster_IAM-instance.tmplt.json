@@ -10,9 +10,19 @@
           ]
         }
       ]
+    },
+    "PrettyRole": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            { "Ref": "RolePrefix" },
+            ""
+          ]
+        }
+      ]
     }
   },
-  "Description": "This template sets up the IAM role needed by an Gluster instance",
+  "Description": "Template to set up IAM role needed by Gluster instances.",
   "Outputs": {
     "InstanceRole": {
       "Description": "Name of the instance role",
@@ -35,6 +45,10 @@
   "Parameters": {
     "BackupBucketArn": {
       "Description": "S3 Bucket to host Gluster backups",
+      "Type": "String"
+    },
+    "RolePrefix": {
+      "Description": "Prefix to apply to IAM role to make things a bit prettier (optional).",
       "Type": "String"
     },
     "ServiceTld": {
@@ -133,12 +147,18 @@
         },
         "Path": "/",
         "RoleName": {
-          "Fn::Join": [
-            "",
-            [
-              "INSTANCE_",
-              { "Ref": "AWS::StackName" }
-            ]
+          "Fn::If": [
+            "PrettyRole",
+            { 
+              "Fn::Join": [
+                "-",
+                [
+                  { "Ref": "RolePrefix" },
+                  { "Ref": "AWS::StackName" }
+                ]
+              ]
+            },
+            { "Ref": "AWS::NoValue" }
           ]
         }
       },
