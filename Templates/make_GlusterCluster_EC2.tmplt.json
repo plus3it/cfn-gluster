@@ -134,6 +134,13 @@
       "Description": "Name of an existing EC2 KeyPair: https://console.aws.amazon.com/ec2/v2/home#KeyPairs:",
       "Type": "AWS::EC2::KeyPair::KeyName"
     },
+    "ProvisionUser": {
+      "AllowedPattern": "[a-z0-9]{6,12}+",
+      "ConstraintDescription": "Alphanumeric string between 6 and 12 characters.",
+      "Default": "jirabuild",
+      "Description": "Default login user account name.",
+      "Type": "String"
+    },
     "PyStache": {
       "Default": "pystache",
       "Description": "Name of preferred pystache RPM.",
@@ -316,6 +323,14 @@
               "",
               [
                 "#cloud-config\n",
+                "\n",
+                "system_info:\n",
+                "  default_user:\n",
+                "    name: ",
+                {
+                  "Ref": "ProvisionUser"
+                },
+                "\n",
                 "\n",
                 "hostname: ",
                   { "Ref": "GlusNodeName"},

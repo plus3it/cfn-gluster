@@ -1,5 +1,21 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
+  "Metadata": {
+    "AWS::CloudFormation::Interface": {
+      "ParameterGroups": [
+        {
+          "Label": {
+            "default": ""
+          },
+          "Parameters": [
+            "ServiceTld",
+            "RolePrefix",
+            "BackupBucketArn"
+          ]
+        }
+      ]
+    }
+  },
   "Conditions": {
     "DoBucketStuff": {
       "Fn::Not": [
@@ -44,7 +60,7 @@
   },
   "Parameters": {
     "BackupBucketArn": {
-      "Description": "S3 Bucket to host Gluster backups",
+      "Description": "S3 Bucket to host Gluster backups (optional).",
       "Type": "String"
     },
     "RolePrefix": {

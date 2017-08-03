@@ -1,7 +1,62 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
   "Description": "This template stands up a basic, 2-node GlusterFs mirrored cluster and associated SG and EC2 components.",
-  "Metadata": {},
+  "Metadata": {
+    "AWS::CloudFormation::Interface": {
+      "ParameterGroups": [
+        {
+          "Label": {
+            "default": "Child Template URLs"
+          },
+          "Parameters": [
+            "SgTemplateUri",
+            "IamTemplateUri",
+            "GlusNodeTemplateUri"
+          ]
+        },
+        {
+          "Label": {
+            "default": "EC2 Config"
+          },
+          "Parameters": [
+            "AmiId",
+            "ClusterInstanceType",
+            "ShareVolDev",
+            "ShareVolSize",
+            "ShareVolType",
+            "GlusterSubnets",
+            "KeyPairName"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Gluster Config"
+          },
+          "Parameters": [
+            "TargetVPC",
+            "GlusDomName",
+            "GlusNodeName",
+            "GlusterOsprepScript",
+            "GlusterGfsScript",
+            "ConsumerApplication"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Misc. Config. Items"
+          },
+          "Parameters": [
+            "ServiceTld",
+            "RolePrefix",
+            "EpelRepo",
+            "PipRpm",
+            "PyStache",
+            "BackupBucketArn"
+          ]
+        }
+      ]
+    }
+  },
   "Outputs": {},
   "Parameters": {
     "AmiId": {
@@ -10,13 +65,7 @@
       "Type": "String"
     },
     "BackupBucketArn": {
-      "Description": "S3 Bucket to host Gluster backups",
-      "Type": "String"
-    },
-    "CfnEndpointUrl": {
-      "AllowedPattern": "^$|^http://.*$|^https://.*$",
-      "Default": "",
-      "Description": "URL to the CloudFormation Endpoint. e.g. https://cloudformation.us-east-1.amazonaws.com",
+      "Description": "S3 Bucket to host Gluster backups (not currently implemented).",
       "Type": "String"
     },
     "ClusterInstanceType": {
@@ -148,7 +197,7 @@
     },
     "TargetVPC": {
       "AllowedPattern": "^vpc-[0-9a-f]*$",
-      "Description": "ID of the VPC to deploy Confluence components into.",
+      "Description": "ID of the VPC to deploy GlusterFS components into.",
       "Type": "AWS::EC2::VPC::Id"
     }
   },
@@ -157,7 +206,16 @@
       "Properties": {
         "Parameters": {
           "AmiId": { "Ref": "AmiId" },
-          "CfnEndpointUrl": { "Ref": "CfnEndpointUrl" },
+          "CfnEndpointUrl": {
+            "Fn::Join": [
+              ".",
+              [
+                "https://cloudformation",
+                { "Ref": "AWS::Region" },
+                { "Ref": "ServiceTld" }
+              ]
+            ]
+          },
           "ClusterInstanceType": { "Ref": "ClusterInstanceType" },
           "ClusterSecurityGroup": {
             "Fn::Join": [
@@ -199,7 +257,16 @@
       "Properties": {
         "Parameters": {
           "AmiId": { "Ref": "AmiId" },
-          "CfnEndpointUrl": { "Ref": "CfnEndpointUrl" },
+          "CfnEndpointUrl": {
+            "Fn::Join": [
+              ".",
+              [
+                "https://cloudformation",
+                { "Ref": "AWS::Region" },
+                { "Ref": "ServiceTld" }
+              ]
+            ]
+          },
           "ClusterInstanceType": { "Ref": "ClusterInstanceType" },
           "ClusterSecurityGroup": {
             "Fn::Join": [
