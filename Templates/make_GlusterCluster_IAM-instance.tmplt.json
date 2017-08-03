@@ -131,7 +131,16 @@
           ],
           "Version": "2012-10-17"
         },
-        "Path": "/"
+        "Path": "/",
+        "RoleName": {
+          "Fn::Join": [
+            "",
+            [
+              "INSTANCE_",
+              { "Ref": "AWS::StackName" }
+            ]
+          ]
+        }
       },
       "Type": "AWS::IAM::Role"
     }
