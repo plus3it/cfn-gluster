@@ -229,7 +229,7 @@
             "Fn::Join": [
               ",",
               [
-                { "Fn::GetAtt": [ "IamRes", "Outputs.InstanceRoleArn" ] }
+                { "Fn::GetAtt": [ "IamRes", "Outputs.InstanceRoleProfile" ] }
               ]
             ]
           },

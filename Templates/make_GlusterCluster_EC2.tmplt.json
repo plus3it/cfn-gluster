@@ -281,6 +281,13 @@
             ]
           }
         ],
+        "IamInstanceProfile": {
+          "Fn::If": [
+            "AssignInstanceRole",
+            { "Ref": "InstanceProfile" },
+            { "Ref": "AWS::NoValue" }
+          ]
+        },
         "ImageId": { "Ref": "AmiId" },
         "InstanceType": { "Ref": "ClusterInstanceType" },
         "KeyName": { "Ref": "KeyPairName" },
