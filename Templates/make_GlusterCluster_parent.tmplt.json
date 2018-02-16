@@ -25,7 +25,9 @@
             "ShareVolSize",
             "ShareVolType",
             "GlusterSubnets",
-            "KeyPairName"
+            "ProvisionUser",
+            "KeyPairName",
+            "AdminPubkeyURL"
           ]
         },
         {
@@ -59,6 +61,11 @@
   },
   "Outputs": {},
   "Parameters": {
+    "AdminPubkeyURL": {
+      "AllowedPattern": "^$|^http://.*$|^https://.*$",
+      "Description": "URL to the file containing the admin users' SSH public keys.",
+      "Type": "String"
+    },
     "AmiId": {
       "AllowedPattern": "^ami-[0-9a-z]{8}$|^ami-[0-9a-z]{17}$",
       "Description": "ID of the AMI to launch",
@@ -144,6 +151,13 @@
       "Description": "Name of preferred pip RPM.",
       "Type": "String"
     },
+    "ProvisionUser": {
+      "AllowedPattern": "[a-z0-9]{6,12}+",
+      "ConstraintDescription": "Alphanumeric string between 6 and 12 characters.",
+      "Default": "glusbuild",
+      "Description": "Default login user account name.",
+      "Type": "String"
+    },
     "PyStache": {
       "Default": "pystache",
       "Description": "Name of preferred pystache RPM.",
@@ -205,6 +219,7 @@
     "GfsN0Res": {
       "Properties": {
         "Parameters": {
+          "AdminPubkeyURL": { "Ref": "AdminPubkeyURL" },
           "AmiId": { "Ref": "AmiId" },
           "CfnEndpointUrl": {
             "Fn::Join": [
@@ -244,6 +259,7 @@
           },
           "KeyPairName": { "Ref": "KeyPairName" },
           "PipRpm": { "Ref": "PipRpm" },
+          "ProvisionUser": { "Ref": "ProvisionUser" },
           "PyStache": { "Ref": "PyStache" },
           "ShareVolDev": { "Ref": "ShareVolDev" },
           "ShareVolSize": { "Ref": "ShareVolSize" },
@@ -256,6 +272,7 @@
     "GfsN1Res": {
       "Properties": {
         "Parameters": {
+          "AdminPubkeyURL": { "Ref": "AdminPubkeyURL" },
           "AmiId": { "Ref": "AmiId" },
           "CfnEndpointUrl": {
             "Fn::Join": [
@@ -302,6 +319,7 @@
           },
           "KeyPairName": { "Ref": "KeyPairName" },
           "PipRpm": { "Ref": "PipRpm" },
+          "ProvisionUser": { "Ref": "ProvisionUser" },
           "PyStache": { "Ref": "PyStache" },
           "ShareVolDev": { "Ref": "ShareVolDev" },
           "ShareVolSize": { "Ref": "ShareVolSize" },

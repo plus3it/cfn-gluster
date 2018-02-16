@@ -45,6 +45,11 @@
     }
   },
   "Parameters": {
+    "AdminPubkeyURL": {
+      "AllowedPattern": "^$|^http://.*$|^https://.*$",
+      "Description": "URL the file containing the admin users' SSH public keys.",
+      "Type": "String"
+    },
     "AmiId": {
       "AllowedPattern": "^ami-[0-9a-z]{8}$|^ami-[0-9a-z]{17}$",
       "Description": "ID of the AMI to launch",
@@ -137,7 +142,7 @@
     "ProvisionUser": {
       "AllowedPattern": "[a-z0-9]{6,12}+",
       "ConstraintDescription": "Alphanumeric string between 6 and 12 characters.",
-      "Default": "jirabuild",
+      "Default": "glusbuild",
       "Description": "Default login user account name.",
       "Type": "String"
     },
@@ -401,7 +406,29 @@
                 "      env | grep ^GLUSTER_ > /etc/cfn/gluster.cfn_envs\n",
                 "      \n",
                 "      \n",
-                "      # Get the config scripts\n",
+                "      # Add admin SSH keys to the ",
+                       { "Ref": "ProvisionUser" },
+                       " account\n",
+                "      export PROVHOME=/home/",
+                       { "Ref": "ProvisionUser" },
+                       "\n",
+                "      if [[ ! -d ${PROVHOME}/.ssh ]]\n",
+                "      then\n",
+                "         printf \"Waiting for ${PROVHOME}/.ssh to be created\"\n",
+                "         while [[ ! -d ${PROVHOME}/.ssh ]]\n",
+                "         do\n",
+                "            printf \".\"\n",
+                "            sleep 5\n",
+                "         done\n",
+                "         echo \"Found.\"\n",
+                "      fi\n",
+                "      \n",
+                "      curl -skL ",
+                       { "Ref": "AdminPubkeyURL" },
+                       " >> ${PROVHOME}/.ssh/authorized_keys ||",
+                       " err_exit 'Failed to install admin-users keys'\n",
+                "      \n",
+                "      # Get the configuration scripts\n",
                 "      curl -skL ",
                        { "Ref": "GlusterGfsScript" },
                        " -o /root/GlusterConfig.sh\n",
