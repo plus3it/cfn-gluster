@@ -1,9 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
   "Conditions": {
-    "CreateSharedVolume": {
-      "Fn::Equals": [ { "Ref": "SharedVolumeDevice" }, "true" ]
-    },
     "NotGenFive": {
       "Fn::Not": [
         {
@@ -175,18 +172,19 @@
   },
   "Outputs": {},
   "Parameters": {
+    "AdminCIDR": {
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "must be a valid CIDR range of the form x.x.x.x/x.",
+      "Default": "0.0.0.0/0",
+      "Description": "Source IP address for administrative SSH access",
+      "MaxLength": "18",
+      "MinLength": "9",
+      "Type": "String"
+    },
     "AmiId": {
       "AllowedPattern": "^ami-[0-9a-z]{8}$|^ami-[0-9a-z]{17}$",
       "Description": "ID of the AMI to launch",
       "Type": "String"
-    },
-    "AvailabilityZone01": {
-      "Description": "Availability zone of Subnet01.",
-      "Type": "AWS::EC2::AvailabilityZone::Name"
-    },
-    "AvailabilityZone02": {
-      "Description": "Availability zone of Subnet02.",
-      "Type": "AWS::EC2::AvailabilityZone::Name"
     },
     "DistributionNum": {
       "ConstraintDescription": "must be 1 - 9",
@@ -247,15 +245,6 @@
       "MinValue": "20",
       "Type": "Number"
     },
-    "SharedVolumeDevice": {
-      "AllowedValues": [
-        "false",
-        "true"
-      ],
-      "Default": "false",
-      "Description": "(Vestigial) Whether to use an EBS-based backup-staging location",
-      "Type": "String"
-    },
     "SharedVolumeSize": {
       "ConstraintDescription": "Must be between 10GiB and 16384GiB.",
       "Default": "10",
@@ -276,22 +265,9 @@
       "Description": "Type of EBS volume to create. Ignored if \"SharedVolumeDevice\" is blank",
       "Type": "String"
     },
-    "SSHFrom": {
-      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
-      "ConstraintDescription": "must be a valid CIDR range of the form x.x.x.x/x.",
-      "Default": "0.0.0.0/0",
-      "Description": "Source IP address for SSH access",
-      "MaxLength": "18",
-      "MinLength": "9",
-      "Type": "String"
-    },
-    "Subnet01": {
-      "Description": "SubnetID to which GlusterFS nodes belong.",
-      "Type": "AWS::EC2::Subnet::Id"
-    },
-    "Subnet02": {
-      "Description": "SubnetID to which GlusterFS nodes belong.",
-      "Type": "AWS::EC2::Subnet::Id"
+    "SubnetList": {
+      "Description": "Subnets to which GlusterFS nodes may belong.",
+      "Type": "List<AWS::EC2::Subnet::Id>"
     },
     "VpcId": {
       "Default": "vpc-xxxxxxxx",
@@ -305,7 +281,7 @@
         "GroupDescription": "Allow unfettered communications between cluster-nodes",
         "SecurityGroupIngress": [
           {
-            "CidrIp": { "Ref": "SSHFrom" },
+            "CidrIp": { "Ref": "AdminCIDR" },
             "FromPort": "22",
             "IpProtocol": "tcp",
             "ToPort": "22"
@@ -327,10 +303,6 @@
     },
     "NodeFleet": {
       "Properties": {
-        "AvailabilityZones": [
-          { "Ref": "AvailabilityZone01" },
-          { "Ref": "AvailabilityZone02" }
-        ],
         "DesiredCapacity": {
           "Fn::FindInMap": [
             "MultiplicationTable",
@@ -368,10 +340,7 @@
             }
           }
         ],
-        "VPCZoneIdentifier": [
-          { "Ref": "Subnet01" },
-          { "Ref": "Subnet02" }
-        ]
+        "VPCZoneIdentifier": { "Ref": "SubnetList" }
       },
       "Type": "AWS::AutoScaling::AutoScalingGroup"
     },
@@ -677,36 +646,30 @@
             }
           },
           {
-            "Fn::If": [
-              "CreateSharedVolume",
-              {
-                "DeviceName": {
-                  "Fn::If": [
-                    "NotGenFive",
-                    {
-                      "Fn::FindInMap": [
-                         "InstanceTypeCapabilities",
-                         "PreGenFive",
-                         "ExternDeviceNameApp"
-                      ]
-                    },
-                    {
-                      "Fn::FindInMap": [
-                        "InstanceTypeCapabilities",
-                        "IsGenFive",
-                        "ExternDeviceNameApp"
-                      ]
-                    }
+            "DeviceName": {
+              "Fn::If": [
+                "NotGenFive",
+                {
+                  "Fn::FindInMap": [
+                     "InstanceTypeCapabilities",
+                     "PreGenFive",
+                     "ExternDeviceNameApp"
                   ]
                 },
-                "Ebs": {
-                  "DeleteOnTermination": "true",
-                  "VolumeSize": { "Ref": "SharedVolumeSize" },
-                  "VolumeType": { "Ref": "SharedVolumeType" }
+                {
+                  "Fn::FindInMap": [
+                    "InstanceTypeCapabilities",
+                    "IsGenFive",
+                    "ExternDeviceNameApp"
+                  ]
                 }
-              },
-              { "Ref": "AWS::NoValue" }
-            ]
+              ]
+            },
+            "Ebs": {
+              "DeleteOnTermination": "true",
+              "VolumeSize": { "Ref": "SharedVolumeSize" },
+              "VolumeType": { "Ref": "SharedVolumeType" }
+            }
           }
         ],
         "IamInstanceProfile": { "Ref": "PowerUserProfile" },
