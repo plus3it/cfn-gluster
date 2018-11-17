@@ -1,6 +1,14 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
   "Conditions": {
+    "AssignInstanceRole": {
+      "Fn::Not": [
+        { "Fn::Equals": [ { "Ref": "InstanceRoleProfile" }, "" ] }
+      ]
+    },
+    "CreateIam": {
+      "Fn::Equals": [ { "Ref": "InstanceRoleProfile" }, "" ]
+    },
     "NotGenFive": {
       "Fn::Not": [
         {
@@ -193,6 +201,16 @@
       "MaxValue": "9",
       "MinValue": "1",
       "Type": "Number"
+    },
+    "InstanceRoleName": {
+      "Default": "",
+      "Description": "(Optional) IAM instance role to apply to the instance",
+      "Type": "String"
+    },
+    "InstanceRoleProfile": {
+      "Default": "",
+      "Description": "(Optional) IAM instance-role profile to apply to the instance(s)",
+      "Type": "String"
     },
     "InstanceType": {
       "AllowedValues": [
@@ -672,7 +690,13 @@
             }
           }
         ],
-        "IamInstanceProfile": { "Ref": "PowerUserProfile" },
+        "IamInstanceProfile": {
+          "Fn::If": [
+            "AssignInstanceRole",
+            { "Ref": "InstanceRoleProfile" },
+            { "Ref": "PowerUserProfile" }
+          ]
+        },
         "ImageId": { "Ref": "AmiId" },
         "InstanceMonitoring": "false",
         "InstanceType": { "Ref": "InstanceType" },
@@ -732,6 +756,7 @@
       "Type": "AWS::CloudFormation::WaitConditionHandle"
     },
     "PowerUserProfile": {
+      "Condition": "CreateIam",
       "Properties": {
         "Path": "/",
         "Roles": [
@@ -741,6 +766,7 @@
       "Type": "AWS::IAM::InstanceProfile"
     },
     "PowerUserRole": {
+      "Condition": "CreateIam",
       "Properties": {
         "AssumeRolePolicyDocument": {
           "Statement": [
