@@ -526,15 +526,98 @@
               {
                 "ConfigSet": "init"
               },
-              "makeVolume",
               "mountVolume"
             ],
             "makeNode": [
               {
                 "ConfigSet": "init"
               },
-              "makeBrick"
+              "GlusterSetup",
+              "makeBrick",
+              "makeVolume"
             ]
+          },
+          "GlusterSetup": {
+            "files": {
+              "/etc/cfn/scripts/volumeSetup.sh": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "#!/bin/bash\n",
+                      "# Script to configure an OS for use with Gluster\n",
+                      "#\n",
+                      "#################################################################\n",
+                      "PROGNAME=\"$(basename \"${0}\")\"\n",
+                      "VOLNAME=\"${1:-vol01}\"\n",
+                      "VOLMOUNT=\"${3:-/var/glusterfs/${VOLNAME}}\"\n",
+                      "REPLCNT=\"replica ${2:-2}\"\n",
+                      "if [[ ${REPLCNT} =~ .*2 ]]\n",
+                      "then\n",
+                      "   FORCE=\"force\"\n",
+                      "else\n",
+                      "   FORCE=\"\"\n",
+                      "fi\n",
+                      "\n",
+                      "##\n",
+                      "## Set up an error logging and exit-state\n",
+                      "function err_exit {\n",
+                      "   local ERRSTR=\"${1}\"\n",
+                      "   local SCRIPTEXIT=${2:-1}\n",
+                      "\n",
+                      "   # Our output channels\n",
+                      "   echo \"${ERRSTR}\" > /dev/stderr\n",
+                      "   logger -t \"${PROGNAME}\" -p kern.crit \"${ERRSTR}\"\n",
+                      "\n",
+                      "   # Need our exit to be an integer\n",
+                      "   if [[ ${SCRIPTEXIT} =~ ^[0-9]+$ ]]\n",
+                      "   then\n",
+                      "      exit \"${SCRIPTEXIT}\"\n",
+                      "   else\n",
+                      "      exit 1\n",
+                      "   fi\n",
+                      "}\n",
+                      "\n",
+                      "# Create location to mount the created volume\n",
+                      "printf \"Creating %s... \" \"${VOLMOUNT}\"\n",
+                      "if [[ -d ${VOLMOUNT} ]]\n",
+                      "then\n",
+                      "   echo \"Already exists\"\n",
+                      "else\n",
+                      "   install -Ddm 0755 \"${VOLMOUNT}\" && echo \"Success\" || \\\n",
+                      "     err_exit \"Failed creating ${VOLMOUNT}\"\n",
+                      "fi\n",
+                      "\n",
+                      "\n",
+                      "sleep 30\n",
+                      "\n",
+                      "# Find our peers\n",
+                      "for HOST in $( cat /etc/glusterhosts )\n",
+                      "do\n",
+                      "   gluster peer probe ${HOST} || err_exit \"Peer-probe failed for ${HOST}\"\n",
+                      "done\n",
+                      "\n",
+                      "# Create a replicated volume\n",
+                      "printf \"Attempting to create %s... \" \"${VOLNAME}\"\n",
+                      "if [[ $(gluster volume info \"${VOLNAME}\" > /dev/null 2>&1 )$? -eq 0 ]]\n",
+                      "then\n",
+                      "   echo \"Volume '${VOLNAME}' already exists\"\n",
+                      "else\n",
+                      "   gluster volume create \"${VOLNAME}\" ${REPLCNT} \\\n",
+                      "      $( sed -r \"s!( +|\t+|$)!:${VOLMOUNT} !g\" /etc/glusterhosts ) \\\n",
+                      "      \"${FORCE}\" && echo \"Success\" || err_exit \"Creation of '${VOLNAME}' failed\"\n",
+                      "\n",
+                      "   printf \"Attempting to start %s... \" \"${VOLNAME}\"\n",
+                      "   gluster volume start \"${VOLNAME}\" || err_exit \"Failed to start Gluster-volume '${VOLNAME}'\"\n",
+                      "fi\n"
+                    ]
+                  ]
+                },
+                "group": "root",
+                "mode": "000700",
+                "owner": "root"
+              }
+            }
           },
           "installGlusterd": {
             "packages": {
@@ -642,7 +725,7 @@
           },
           "makeVolume": {
             "commands": {
-              "00listHosts": {
+              "00-list-hosts": {
                 "command": {
                   "Fn::Join": [
                     "",
@@ -660,42 +743,17 @@
                         ]
                       },
                       "' --query 'Reservations[*].Instances[*].PrivateIpAddress' --output text",
-                      "> glusterhosts"
+                      "> /etc/glusterhosts"
                     ]
                   ]
                 }
               },
-              "01peerProbe": {
-                "command": "for host in $(cat glusterhosts);do gluster peer probe $host;done"
+              "01-firewalld": {
+                "command": "firewall-offline-cmd --add-service=glusterfs && systemctl restart firewalld",
+                "ignoreErrors": "true"
               },
-              "02volumeCreate": {
-                "command": {
-                  "Fn::Join": [
-                    "",
-                    [
-                      "gluster volume create vol01 ",
-                      {
-                        "Fn::If": [
-                          "Replication",
-                          {
-                            "Fn::Join": [
-                              "",
-                              [
-                                "replica ",
-                                { "Ref": "ReplicaNum" }
-                              ]
-                            ]
-                          },
-                          ""
-                        ]
-                      },
-                      " $(sed -r 's!( +|\\t+|$)!:/bricks/vol01 !g' glusterhosts)"
-                    ]
-                  ]
-                }
-              },
-              "02volumeStart": {
-                "command": "gluster volume start vol01"
+              "02-gluster-config": {
+                "command": "/etc/cfn/scripts/volumeSetup.sh vol01"
               }
             }
           },
@@ -706,7 +764,7 @@
                 "ignoreErrors": "true"
               },
               "01mountVolume": {
-                "command": "mount -t glusterfs $(head -n 1 glusterhosts|cut -f1):/vol01 /mnt/glusterfs/vol01",
+                "command": "mount -t glusterfs $(head -n 1 /etc/glusterhosts|cut -f1):/vol01 /mnt/glusterfs/vol01",
                 "ignoreErrors": "true"
               },
               "02modifyFstab": {
