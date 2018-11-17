@@ -753,7 +753,16 @@
                 "ignoreErrors": "true"
               },
               "02-gluster-config": {
-                "command": "/etc/cfn/scripts/volumeSetup.sh vol01"
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "/etc/cfn/scripts/volumeSetup.sh vol01 ",
+                      { "Ref": "ReplicaNum" },
+                      " /bricks/vol01/shared\n"
+                    ]
+                  ]
+                }
               }
             }
           },
