@@ -173,31 +173,7 @@
       }
     }
   },
-  "Outputs": {
-    "HowToMountVolume": {
-      "Description": "Before mount, you should associate GlusterClientSecurityGroup with client instances.",
-      "Value": {
-        "Fn::GetAtt": [
-          "ClientWaitCondition",
-          "Data"
-        ]
-      }
-    },
-    "SSHToTestClient": {
-      "Description": "SSH command to connect to the test client.",
-      "Value": {
-        "Fn::Join": [
-          "",
-          [
-            "ssh -i /path/to/",
-            { "Ref": "KeyName" },
-            ".pem -l ec2-user ",
-            { "Ref": "ClientIP" }
-          ]
-        ]
-      }
-    }
-  },
+  "Outputs": {},
   "Parameters": {
     "AmiId": {
       "AllowedPattern": "^ami-[0-9a-z]{8}$|^ami-[0-9a-z]{17}$",
@@ -324,130 +300,15 @@
     }
   },
   "Resources": {
-    "ClientIP": {
-      "Properties": {
-        "Domain": "vpc",
-        "InstanceId": { "Ref": "ClientInstance" }
-      },
-      "Type": "AWS::EC2::EIP"
-    },
-    "ClientInstance": {
-      "DependsOn": "NodeWaitCondition",
-      "Properties": {
-        "IamInstanceProfile": { "Ref": "PowerUserProfile" },
-        "ImageId": { "Ref": "AmiId" },
-        "InstanceType": { "Ref": "InstanceType" },
-        "KeyName": { "Ref": "KeyName" },
-        "Monitoring": "false",
-        "SecurityGroupIds": [
-          { "Ref": "GlusterNodeSecurityGroup" },
-          { "Ref": "GlusterClientSecurityGroup" }
-        ],
-        "SubnetId": { "Ref": "Subnet01" },
-        "Tags": [
-          {
-            "Key": "Name",
-            "Value": {
-              "Fn::Join": [
-                "-",
-                [
-                  { "Ref": "AWS::StackName" },
-                  "GlusterClient"
-                ]
-              ]
-            }
-          },
-          {
-            "Key": "Network",
-            "Value": "Public"
-          }
-        ],
-        "UserData": {
-          "Fn::Base64": {
-            "Fn::Join": [
-              "",
-              [
-                "#! /bin/bash -v\n",
-                "yum update -y aws-cfn-bootstrap aws-cli\n",
-                "# Helper function\n",
-                "function error_exit\n",
-                "{\n",
-                "  /opt/aws/bin/cfn-signal -e 1 -r \"$1\" '",
-                { "Ref": "ClientWaitHandle" },
-                "'\n",
-                "  exit 1\n",
-                "}\n",
-                "# Install packages\n",
-                "/opt/aws/bin/cfn-init -v -s ",
-                { "Ref": "AWS::StackId" },
-                " -r NodeLaunchConfig -c makeGluster",
-                "  --region ",
-                { "Ref": "AWS::Region" },
-                " || error_exit 'Failed to run cfn-init'\n",
-                "# All is well so signal success\n",
-                "/opt/aws/bin/cfn-signal -e 0 -i 'HowToMount' -d \"mount -t glusterfs $(head -n 1 glusterhosts|cut -f1):/vol01 /your/mountpoint\" '",
-                { "Ref": "ClientWaitHandle" },
-                "'\n"
-              ]
-            ]
-          }
-        }
-      },
-      "Type": "AWS::EC2::Instance"
-    },
-    "ClientWaitCondition": {
-      "DependsOn": "ClientInstance",
-      "Properties": {
-        "Handle": { "Ref": "ClientWaitHandle" },
-        "Timeout": "600"
-      },
-      "Type": "AWS::CloudFormation::WaitCondition"
-    },
-    "ClientWaitHandle": {
-      "Type": "AWS::CloudFormation::WaitConditionHandle"
-    },
-    "GlusterClientSecurityGroup": {
-      "Properties": {
-        "GroupDescription": "Associate this group with instances which mount GlusterFS Volume.",
-        "SecurityGroupIngress": [
-          {
-            "CidrIp": { "Ref": "SSHFrom" },
-            "FromPort": "22",
-            "IpProtocol": "tcp",
-            "ToPort": "22"
-          }
-        ],
-        "VpcId": { "Ref": "VpcId" }
-      },
-      "Type": "AWS::EC2::SecurityGroup"
-    },
     "GlusterNodeSecurityGroup": {
       "Properties": {
-        "GroupDescription": "Allow mount from GlusterClientSecurityGroup",
+        "GroupDescription": "Allow unfettered communications between cluster-nodes",
         "SecurityGroupIngress": [
-          {
-            "FromPort": "38465",
-            "IpProtocol": "tcp",
-            "SourceSecurityGroupId": { "Ref": "GlusterClientSecurityGroup" },
-            "ToPort": "38468"
-          },
-          {
-            "FromPort": "24007",
-            "IpProtocol": "tcp",
-            "SourceSecurityGroupId": { "Ref": "GlusterClientSecurityGroup" },
-            "ToPort": "24107"
-          },
           {
             "CidrIp": { "Ref": "SSHFrom" },
             "FromPort": "22",
             "IpProtocol": "tcp",
             "ToPort": "22"
-          },
-          {
-            "FromPort": "111",
-            "IpProtocol": "tcp",
-            "SourceSecurityGroupId": { "Ref": "GlusterClientSecurityGroup" },
-            "ToPort": "111"
           }
         ],
         "VpcId": { "Ref": "VpcId" }
@@ -555,8 +416,6 @@
                       "if [[ ${REPLCNT} =~ .*2 ]]\n",
                       "then\n",
                       "   FORCE=\"force\"\n",
-                      "else\n",
-                      "   FORCE=\"\"\n",
                       "fi\n",
                       "\n",
                       "##\n",
@@ -589,7 +448,7 @@
                       "fi\n",
                       "\n",
                       "\n",
-                      "sleep 30\n",
+                      "sleep $[ ( $RANDOM % 30 )  + 30 ]\n",
                       "\n",
                       "# Find our peers\n",
                       "for HOST in $( cat /etc/glusterhosts )\n",
@@ -605,7 +464,7 @@
                       "else\n",
                       "   gluster volume create \"${VOLNAME}\" ${REPLCNT} \\\n",
                       "      $( sed -r \"s!( +|\t+|$)!:${VOLMOUNT} !g\" /etc/glusterhosts ) \\\n",
-                      "      \"${FORCE}\" && echo \"Success\" || err_exit \"Creation of '${VOLNAME}' failed\"\n",
+                      "      ${FORCE} && echo \"Success\" || err_exit \"Creation of '${VOLNAME}' failed\"\n",
                       "\n",
                       "   printf \"Attempting to start %s... \" \"${VOLNAME}\"\n",
                       "   gluster volume start \"${VOLNAME}\" || err_exit \"Failed to start Gluster-volume '${VOLNAME}'\"\n",
