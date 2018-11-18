@@ -294,6 +294,10 @@
       "Description": "Type of EBS volume to create. Ignored if \"SharedVolumeDevice\" is blank",
       "Type": "String"
     },
+    "SecurityGroupIds": {
+      "Description": "List of security groups to apply to the instance(s)",
+      "Type": "List<AWS::EC2::SecurityGroup::Id>"
+    },
     "SubnetList": {
       "Description": "Subnets to which GlusterFS nodes may belong.",
       "Type": "List<AWS::EC2::Subnet::Id>"
@@ -305,31 +309,6 @@
     }
   },
   "Resources": {
-    "GlusterNodeSecurityGroup": {
-      "Properties": {
-        "GroupDescription": "Allow unfettered communications between cluster-nodes",
-        "SecurityGroupIngress": [
-          {
-            "CidrIp": { "Ref": "AdminCIDR" },
-            "FromPort": "22",
-            "IpProtocol": "tcp",
-            "ToPort": "22"
-          }
-        ],
-        "VpcId": { "Ref": "VpcId" }
-      },
-      "Type": "AWS::EC2::SecurityGroup"
-    },
-    "GlusterNodeSecurityGroupIngress": {
-      "Properties": {
-        "FromPort": "0",
-        "GroupId": { "Ref": "GlusterNodeSecurityGroup" },
-        "IpProtocol": "tcp",
-        "SourceSecurityGroupId": { "Ref": "GlusterNodeSecurityGroup" },
-        "ToPort": "65535"
-      },
-      "Type": "AWS::EC2::SecurityGroupIngress"
-    },
     "NodeFleet": {
       "Properties": {
         "DesiredCapacity": {
@@ -867,9 +846,7 @@
         "InstanceMonitoring": "false",
         "InstanceType": { "Ref": "InstanceType" },
         "KeyName": { "Ref": "KeyName" },
-        "SecurityGroups": [
-          { "Ref": "GlusterNodeSecurityGroup" }
-        ],
+        "SecurityGroups": { "Ref": "SecurityGroupIds" },
         "UserData": {
           "Fn::Base64": {
             "Fn::Join": [
