@@ -314,6 +314,48 @@
       "Default": "vpc-xxxxxxxx",
       "Description": "VPC ID to which GlusterFS nodes belong.",
       "Type": "AWS::EC2::VPC::Id"
+    },
+    "WatchmakerAdminGroups": {
+      "Default": "",
+      "Description": "(Optional) Colon-separated list of domain groups that should have admin permissions on the EC2 instance",
+      "Type": "String"
+    },
+    "WatchmakerAdminUsers": {
+      "Default": "",
+      "Description": "(Optional) Colon-separated list of domain users that should have admin permissions on the EC2 instance",
+      "Type": "String"
+    },
+    "WatchmakerConfig": {
+      "AllowedPattern": "^$|^http[s]?://.*$",
+      "Default": "",
+      "Description": "(Optional) URL to a Watchmaker config file",
+      "Type": "String"
+    },
+    "WatchmakerEnvironment": {
+      "AllowedValues": [
+        "",
+        "dev",
+        "test",
+        "prod"
+      ],
+      "Default": "",
+      "Description": "Environment in which the instance is being deployed",
+      "Type": "String"
+    },
+    "WatchmakerOuPath": {
+      "AllowedPattern": "^$|^(OU=.+,)+(DC=.+)+$",
+      "Default": "",
+      "Description": "(Optional) DN of the OU to place the instance when joining a domain. If blank and \"WatchmakerEnvironment\" enforces a domain join, the instance will be placed in a default container. Leave blank if not joining a domain, or if \"WatchmakerEnvironment\" is \"false\"",
+      "Type": "String"
+    },
+    "WatchmakerS3Source": {
+      "AllowedValues": [
+        "false",
+        "true"
+      ],
+      "Default": "false",
+      "Description": "Flag that tells watchmaker to use its instance role to retrieve watchmaker content from S3",
+      "Type": "String"
     }
   },
   "Resources": {
