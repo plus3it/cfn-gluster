@@ -64,9 +64,44 @@
         }
       ]
     },
+    "UseAdminGroups": {
+      "Fn::Not": [
+        { "Fn::Equals": [ { "Ref": "WatchmakerAdminGroups" }, "" ] }
+      ]
+    },
     "UseAdminPubkeyURL": {
       "Fn::Not": [
         { "Fn::Equals": [ { "Ref": "AdminPubkeyURL" }, "" ] }
+      ]
+    },
+    "UseAdminUsers": {
+      "Fn::Not": [
+        { "Fn::Equals": [ { "Ref": "WatchmakerAdminUsers" }, "" ] }
+      ]
+    },
+    "UseComputerName": {
+      "Fn::Not": [
+        { "Fn::Equals": [ { "Ref": "WatchmakerComputerName" }, "" ] }
+      ]
+    },
+    "UseEnvironment": {
+      "Fn::Not": [
+        { "Fn::Equals": [ { "Ref": "WatchmakerEnvironment" }, "" ] }
+      ]
+    },
+    "UseOuPath": {
+      "Fn::Not": [
+        { "Fn::Equals": [ { "Ref": "WatchmakerOuPath" }, "" ] }
+      ]
+    },
+    "UseS3Source": {
+      "Fn::Not": [
+        { "Fn::Equals": [ { "Ref": "WatchmakerS3Source" }, "false" ] }
+      ]
+    },
+    "UseWamConfig": {
+      "Fn::Not": [
+        { "Fn::Equals": [ { "Ref": "WatchmakerConfig" }, "" ] }
       ]
     }
   },
@@ -200,6 +235,12 @@
       "Description": "ID of the AMI to launch",
       "Type": "String"
     },
+    "CfnGetPipUrl": {
+      "AllowedPattern": "^http[s]?://.*\\.py$",
+      "Default": "https://bootstrap.pypa.io/get-pip.py",
+      "Description": "URL to get-pip.py",
+      "Type": "String"
+    },
     "CloudWatchAgentUrl": {
       "AllowedPattern": "^$|^s3://.*$",
       "Default": "",
@@ -266,6 +307,12 @@
       "Description": "Name for remote-administration account",
       "Type": "String"
     },
+    "PypiIndexUrl": {
+      "AllowedPattern": "^http[s]?://.*$",
+      "Default": "https://pypi.org/simple",
+      "Description": "URL to the PyPi Index",
+      "Type": "String"
+    },
     "ReplicaNum": {
       "ConstraintDescription": "must be 1 - 9",
       "Default": "2",
@@ -325,6 +372,11 @@
       "Description": "(Optional) Colon-separated list of domain users that should have admin permissions on the EC2 instance",
       "Type": "String"
     },
+    "WatchmakerComputerName": {
+      "Default": "",
+      "Description": "(Optional) Sets the hostname/computername within the OS",
+      "Type": "String"
+    },
     "WatchmakerConfig": {
       "AllowedPattern": "^$|^http[s]?://.*$",
       "Default": "",
@@ -338,7 +390,7 @@
         "test",
         "prod"
       ],
-      "Default": "",
+      "Default": "dev",
       "Description": "Environment in which the instance is being deployed",
       "Type": "String"
     },
@@ -459,6 +511,8 @@
                   { "Ref": "AWS::NoValue" }
                 ]
               },
+              "watchmaker-install",
+              "watchmaker-launch",
               "installGlusterd",
               "startGlusterd"
             ],
@@ -883,6 +937,148 @@
                 }
               }
             }
+          },
+          "watchmaker-install": {
+            "commands": {
+              "10-watchmaker-install": {
+                "command": "bash -xe /etc/cfn/scripts/watchmaker-install.sh"
+              }
+            },
+            "files": {
+              "/etc/cfn/scripts/watchmaker-install.sh": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "#!/bin/bash\n\n",
+                      "PYPI_URL=",
+                      { "Ref": "PypiIndexUrl" },
+                      "\n",
+                      "curl --silent --show-error --retry 5 -L ",
+                      { "Ref": "CfnGetPipUrl" },
+                      " | python - --index-url=\"$PYPI_URL\" 'wheel<0.30.0;python_version<\"2.7\"' 'wheel;python_version>=\"2.7\"'",
+                      "\n",
+                      "pip install",
+                      " --index-url=\"$PYPI_URL\"",
+                      " --upgrade 'pip<10' 'setuptools<37;python_version<\"2.7\"' 'setuptools;python_version>=\"2.7\"' boto3\n",
+                      "pip install",
+                      " --index-url=\"$PYPI_URL\"",
+                      " --upgrade watchmaker\n\n"
+                    ]
+                  ]
+                },
+                "group": "root",
+                "mode": "000700",
+                "owner": "root"
+              }
+            }
+          },
+          "watchmaker-launch": {
+            "commands": {
+              "10-watchmaker-launch": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "watchmaker --log-level debug",
+                      " --log-dir /var/log/watchmaker",
+                      " --exclude-states scap*scan",
+                      " --no-reboot",
+                      {
+                        "Fn::If": [
+                          "UseWamConfig",
+                          {
+                            "Fn::Join": [
+                              "",
+                              [
+                                " --config \"",
+                                { "Ref": "WatchmakerConfig" },
+                                "\""
+                              ]
+                            ]
+                          },
+                          ""
+                        ]
+                      },
+                      {
+                        "Fn::If": [
+                          "UseEnvironment",
+                          {
+                            "Fn::Join": [
+                              "",
+                              [
+                                " --env \"",
+                                { "Ref": "WatchmakerEnvironment" },
+                                "\""
+                              ]
+                            ]
+                          },
+                          ""
+                        ]
+                      },
+                      {
+                        "Fn::If": [
+                          "UseOuPath",
+                          {
+                            "Fn::Join": [
+                              "",
+                              [
+                                " --ou-path \"",
+                                { "Ref": "WatchmakerOuPath" },
+                                "\""
+                              ]
+                            ]
+                          },
+                          ""
+                        ]
+                      },
+                      {
+                        "Fn::If": [
+                          "UseAdminGroups",
+                          {
+                            "Fn::Join": [
+                              "",
+                              [
+                                " --admin-groups \"",
+                                { "Ref": "WatchmakerAdminGroups" },
+                                "\""
+                              ]
+                            ]
+                          },
+                          ""
+                        ]
+                      },
+                      {
+                        "Fn::If": [
+                          "UseAdminUsers",
+                          {
+                            "Fn::Join": [
+                              "",
+                              [
+                                " --admin-users \"",
+                                { "Ref": "WatchmakerAdminUsers" },
+                                "\""
+                              ]
+                            ]
+                          },
+                          ""
+                        ]
+                      },
+                      {
+                        "Fn::If": [
+                          "UseS3Source",
+                          " --s3-source",
+                          ""
+                        ]
+                      }
+                    ]
+                  ]
+                }
+              },
+              "15-salt-nofips": {
+                "command": "salt-call --local ash.fips_disable"
+              }
+            }
           }
         }
       },
@@ -1021,6 +1217,10 @@
                 "/opt/aws/bin/cfn-signal -e 0 '",
                 { "Ref": "NodeWaitHandle" },
                 "'\n",
+                "\n",
+                "# Rebooting so all config-options take effect\n",
+                "echo \"Rebooting so all config-options take effect...\"\n",
+                "systemctl reboot\n",
                 "\n",
                 "--===============3585321300151562773==--"
               ]
