@@ -9,6 +9,11 @@
     "CreateIam": {
       "Fn::Equals": [ { "Ref": "InstanceRoleProfile" }, "" ]
     },
+    "InstallCloudWatchAgent": {
+      "Fn::Not": [
+        { "Fn::Equals": [ { "Ref": "CloudWatchAgentUrl" }, "" ] }
+      ]
+    },
     "NotGenFive": {
       "Fn::Not": [
         {
@@ -194,6 +199,12 @@
       "Description": "ID of the AMI to launch",
       "Type": "String"
     },
+    "CloudWatchAgentUrl": {
+      "AllowedPattern": "^$|^s3://.*$",
+      "Default": "",
+      "Description": "(Optional) S3 URL to CloudWatch Agent installer. Example: s3://amazoncloudwatch-agent/linux/amd64/latest/AmazonCloudWatchAgent.zip",
+      "Type": "String"
+    },
     "DistributionNum": {
       "ConstraintDescription": "must be 1 - 9",
       "Default": "1",
@@ -367,6 +378,13 @@
         "AWS::CloudFormation::Init": {
           "configSets": {
             "init": [
+              {
+                "Fn::If": [
+                  "InstallCloudWatchAgent",
+                  "cw-agent-install",
+                  { "Ref": "AWS::NoValue" }
+                ]
+              },
               "installGlusterd",
               "startGlusterd"
             ],
@@ -384,6 +402,154 @@
               "makeBrick",
               "makeVolume"
             ]
+          },
+          "cw-agent-install": {
+            "commands": {
+              "01-get-cloudwatch-agent": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "install -Dbm 700 -o root -g root /dev/null /etc/cfn/scripts/AmazonCloudWatchAgent.zip &&",
+                      " aws s3 cp ",
+                      { "Ref": "CloudWatchAgentUrl" },
+                      " /etc/cfn/scripts/AmazonCloudWatchAgent.zip"
+                    ]
+                  ]
+                }
+              },
+              "02-extract-cloudwatch-agent": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "yum -y install unzip &&",
+                      "unzip /etc/cfn/scripts/AmazonCloudWatchAgent.zip -d /etc/cfn/scripts/aws-cw-agent"
+                    ]
+                  ]
+                }
+              },
+              "10-install-cloudwatch-agent": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      " bash -xe install.sh &&",
+                      " /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl",
+                      " -a fetch-config -m ec2 -c",
+                      " file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s"
+                    ]
+                  ]
+                },
+                "cwd": "/etc/cfn/scripts/aws-cw-agent"
+              }
+            },
+            "files": {
+              "/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "{",
+                      "  \"logs\": {\n",
+                      "    \"logs_collected\": {\n",
+                      "      \"files\": {\n",
+                      "        \"collect_list\": [\n",
+                      "          {\n",
+                      "            \"file_path\": \"/opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log\",\n",
+                      "            \"log_group_name\": \"",
+                      {
+                        "Fn::If": [
+                          "InstallCloudWatchAgent",
+                          { "Ref": "GlusterLCLogGroup" },
+                          { "Ref": "AWS::NoValue" }
+                        ]
+                      },
+                      "\",\n",
+                      "            \"log_stream_name\": \"cloudwatch_agent_logs_{instance_id}\",\n",
+                      "            \"timestamp_format\": \"%H:%M:%S %y %b %-d\"\n",
+                      " },\n",
+                      "          {\n",
+                      "            \"file_path\": \"/var/log/cfn-init.log\",\n",
+                      "            \"log_group_name\": \"",
+                      {
+                        "Fn::If": [
+                          "InstallCloudWatchAgent",
+                          { "Ref": "GlusterLCLogGroup" },
+                          { "Ref": "AWS::NoValue" }
+                        ]
+                      },
+                      "\",\n",
+                      "            \"log_stream_name\": \"cfn_init_logs_{instance_id}\",\n",
+                      "            \"timestamp_format\": \"%H:%M:%S %y %b %-d\"\n",
+                      " },\n",
+                      "          {\n",
+                      "            \"file_path\": \"/var/log/messages\",\n",
+                      "            \"log_group_name\": \"",
+                      {
+                        "Fn::If": [
+                          "InstallCloudWatchAgent",
+                          { "Ref": "GlusterLCLogGroup" },
+                          { "Ref": "AWS::NoValue" }
+                        ]
+                      },
+                      "\",\n",
+                      "            \"log_stream_name\": \"messages_logs_{instance_id}\",\n",
+                      "            \"timestamp_format\": \"%H:%M:%S %y %b %-d\"\n",
+                      " },\n",
+                      "          {\n",
+                      "            \"file_path\": \"/var/log/watchmaker/watchmaker.log\",\n",
+                      "            \"log_group_name\": \"",
+                      {
+                        "Fn::If": [
+                          "InstallCloudWatchAgent",
+                          { "Ref": "GlusterLCLogGroup" },
+                          { "Ref": "AWS::NoValue" }
+                        ]
+                      },
+                      "\",\n",
+                      "            \"log_stream_name\": \"watchmaker_logs_{instance_id}\",\n",
+                      "            \"timestamp_format\": \"%H:%M:%S %y %b %-d\"\n",
+                      " },\n",
+                      "          {\n",
+                      "            \"file_path\": \"/var/log/watchmaker/salt_call.debug.log\",\n",
+                      "            \"log_group_name\": \"",
+                      {
+                        "Fn::If": [
+                          "InstallCloudWatchAgent",
+                          { "Ref": "GlusterLCLogGroup" },
+                          { "Ref": "AWS::NoValue" }
+                        ]
+                      },
+                      "\",\n",
+                      "            \"log_stream_name\": \"salt_call_debug_logs_{instance_id}\",\n",
+                      "            \"timestamp_format\": \"%H:%M:%S %y %b %-d\"\n",
+                      " },\n",
+                      "          {\n",
+                      "            \"file_path\": \"/var/log/glusterfs/glusterd.log\",\n",
+                      "            \"log_group_name\": \"",
+                      {
+                        "Fn::If": [
+                          "InstallCloudWatchAgent",
+                          { "Ref": "GlusterLCLogGroup" },
+                          { "Ref": "AWS::NoValue" }
+                        ]
+                      },
+                      "\",\n",
+                      "            \"log_stream_name\": \"glusterd_logs_{instance_id}\",\n",
+                      "            \"timestamp_format\": \"%H:%M:%S %y %b %-d\"\n",
+                      " }\n",
+                      "        ]\n",
+                      " }\n",
+                      " },\n",
+                      "    \"log_stream_name\": \"default_logs_{instance_id}\"\n",
+                      " }\n",
+                      "}\n"
+                    ]
+                  ]
+                }
+              }
+            }
           },
           "GlusterSetup": {
             "files": {
@@ -737,6 +903,21 @@
       },
       "Type": "AWS::AutoScaling::LaunchConfiguration"
     },
+    "GlusterLCLogGroup": {
+      "Condition": "InstallCloudWatchAgent",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Join": [
+            "",
+            [
+              "/aws/ec2/lx/",
+              { "Ref": "AWS::StackName" }
+            ]
+          ]
+        }
+      },
+      "Type": "AWS::Logs::LogGroup"
+    },
     "NodeWaitCondition": {
       "DependsOn": "NodeFleet",
       "Properties": {
@@ -777,7 +958,15 @@
               "Effect": "Allow",
               "Principal": {
                 "Service": [
-                  "ec2.amazonaws.com"
+                  {
+                    "Fn::Join": [
+                      ".",
+                      [
+                        "ec2",
+                        { "Ref": "AWS::URLSuffix" }
+                      ]
+                    ]
+                  }
                 ]
               }
             }
