@@ -223,6 +223,57 @@
       }
     }
   },
+  "Metadata": {
+    "AWS::CloudFormation::Interface": {
+      "ParameterGroups": [
+        {
+          "Label": {
+            "default": "EC2 Instance Configuration"
+          },
+          "Parameters": [
+            "AmiId",
+            "InstanceType",
+            "RootVolumeSize",
+            "SharedVolumeType",
+            "SharedVolumeSize",
+            "ReplicaNum",
+            "DistributionNum",
+            "SubnetList",
+            "SecurityGroupIds",
+            "ProvisionUser",
+            "KeyName",
+            "AdminPubkeyURL",
+            "InstanceRoleName",
+            "InstanceRoleProfile"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Watchmaker Configuration"
+          },
+          "Parameters": [
+            "PypiIndexUrl",
+            "CfnGetPipUrl",
+            "WatchmakerEnvironment",
+            "WatchmakerConfig",
+            "WatchmakerS3Source",
+            "WatchmakerOuPath",
+            "WatchmakerComputerName",
+            "WatchmakerAdminGroups",
+            "WatchmakerAdminUsers"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Miscellaneous Parameters"
+          },
+          "Parameters": [
+            "CloudWatchAgentUrl"
+          ]
+        }
+      ]
+    }
+  },
   "Outputs": {},
   "Parameters": {
     "AdminPubkeyURL": {
@@ -356,11 +407,6 @@
     "SubnetList": {
       "Description": "Subnets to which GlusterFS nodes may belong.",
       "Type": "List<AWS::EC2::Subnet::Id>"
-    },
-    "VpcId": {
-      "Default": "vpc-xxxxxxxx",
-      "Description": "VPC ID to which GlusterFS nodes belong.",
-      "Type": "AWS::EC2::VPC::Id"
     },
     "WatchmakerAdminGroups": {
       "Default": "",
