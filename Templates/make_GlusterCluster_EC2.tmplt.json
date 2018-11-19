@@ -291,6 +291,10 @@
       "Description": "ID of the AMI to launch",
       "Type": "String"
     },
+    "BackupBucketName": {
+      "Description": "Name of S3 Bucket used to host Gluster backups",
+      "Type": "String"
+    },
     "CfnGetPipUrl": {
       "AllowedPattern": "^http[s]?://.*\\.py$",
       "Default": "https://bootstrap.pypa.io/get-pip.py",
@@ -717,6 +721,25 @@
                     ]
                   ]
                 }
+              }
+            }
+          },
+          "GlusterEnvs": {
+            "files": {
+              "/etc/cfn/Gluster.envs": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "S3_BACKUP_BUCKET=",
+                      { "Ref": "BackupBucketName" },
+                      "\n"
+                    ]
+                  ]
+                },
+                "group": "root",
+                "mode": "000640",
+                "owner": "root"
               }
             }
           },
@@ -1219,6 +1242,11 @@
                 "Content-Disposition: attachment; filename=\"script.sh\"\n",
                 "\n",
                 "#!/bin/bash -xe\n",
+                "\n",
+                "# Populate /etc/hosts with local hotname\n",
+                "printf \"%s\\t%s %s\\n\" \n",
+                "\"$( hostname -I )\" \"$( hostname -f )\" \n",
+                "\"$( hostname -s )\" >> /etc/hosts\n",
                 "\n",
                 "# Extend any available LVM PVs\n",
                 "if [[ -x $( which pvs ) ]]\n",
