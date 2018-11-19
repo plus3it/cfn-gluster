@@ -89,6 +89,11 @@
         { "Fn::Equals": [ { "Ref": "WatchmakerEnvironment" }, "" ] }
       ]
     },
+    "UseKeyPair": {
+      "Fn::Not": [
+        { "Fn::Equals": [ { "Ref": "KeyName" }, "" ] }
+      ]
+    },
     "UseOuPath": {
       "Fn::Not": [
         { "Fn::Equals": [ { "Ref": "WatchmakerOuPath" }, "" ] }
@@ -344,11 +349,7 @@
       "Type": "String"
     },
     "KeyName": {
-      "AllowedPattern": "[-_ a-zA-Z0-9]*",
-      "ConstraintDescription": "can contain only alphanumeric characters, spaces, dashes and underscores.",
       "Description": "Name of an existing EC2 KeyPair to enable SSH access to the instances",
-      "MaxLength": "64",
-      "MinLength": "1",
       "Type": "String"
     },
     "ProvisionUser": {
@@ -1176,7 +1177,13 @@
         "ImageId": { "Ref": "AmiId" },
         "InstanceMonitoring": "false",
         "InstanceType": { "Ref": "InstanceType" },
-        "KeyName": { "Ref": "KeyName" },
+        "KeyName": {
+          "Fn::If": [
+            "UseKeyPair",
+            { "Ref": "KeyName" },
+            { "Ref": "AWS::NoValue" }
+          ]
+        },
         "SecurityGroups": { "Ref": "SecurityGroupIds" },
         "UserData": {
           "Fn::Base64": {
