@@ -1,5 +1,17 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
+  "Conditions": {
+    "DoBucketStuff": {
+      "Fn::Not": [ { "Fn::Equals": [ { "Ref": "BackupBucketName" }, "" ] } ]
+    },
+    "EnableCwaFetch": {
+      "Fn::Not": [ { "Fn::Equals": [ { "Ref": "CloudwatchBucketName" }, "" ] } ]
+    },
+    "PrettyRole": {
+      "Fn::Not": [ { "Fn::Equals": [ { "Ref": "RolePrefix" }, "" ] } ]
+    }
+  },
+  "Description": "Template to set up IAM role needed by Gluster instances.",
   "Metadata": {
     "AWS::CloudFormation::Interface": {
       "ParameterGroups": [
@@ -8,68 +20,42 @@
             "default": ""
           },
           "Parameters": [
-            "ServiceTld",
             "RolePrefix",
-            "BackupBucketArn"
+            "BackupBucketName",
+            "CloudwatchBucketName"
           ]
         }
       ]
     }
   },
-  "Conditions": {
-    "DoBucketStuff": {
-      "Fn::Not": [
-        {
-          "Fn::Equals": [
-            { "Ref": "BackupBucketArn" },
-            ""
-          ]
-        }
-      ]
-    },
-    "PrettyRole": {
-      "Fn::Not": [
-        {
-          "Fn::Equals": [
-            { "Ref": "RolePrefix" },
-            ""
-          ]
-        }
-      ]
-    }
-  },
-  "Description": "Template to set up IAM role needed by Gluster instances.",
   "Outputs": {
-    "InstanceRole": {
-      "Description": "Name of the instance role",
-      "Value": { "Ref": "InstanceRole" }
-    },
     "InstanceRoleArn": {
       "Description": "ARN of the instance role",
-      "Value": {
-        "Fn::GetAtt": [
-          "InstanceRole",
-          "Arn"
-        ]
-      }
+      "Export": { "Name": { "Fn::Sub": "${AWS::StackName}-InstanceRoleArn" } },
+      "Value": { "Fn::GetAtt": [ "InstanceRole", "Arn" ] }
+    },
+    "InstanceRoleName": {
+      "Description": "Name of the instance role",
+      "Export": { "Name": { "Fn::Sub": "${AWS::StackName}-InstanceRoleName" } },
+      "Value": { "Ref": "InstanceRole" }
     },
     "InstanceRoleProfile": {
       "Description": "Profile of the instance role",
+      "Export": { "Name": { "Fn::Sub": "${AWS::StackName}-InstanceRoleProfile" } },
       "Value": { "Ref": "InstanceProfile" }
     }
   },
   "Parameters": {
-    "BackupBucketArn": {
-      "Description": "S3 Bucket to host Gluster backups (optional).",
+    "BackupBucketName": {
+      "Description": "Name of S3 Bucket used to host Gluster backups",
+      "Type": "String"
+    },
+    "CloudwatchBucketName": {
+      "Description": "Name of the S3 Bucket hosting the CloudWatch agent archive files",
       "Type": "String"
     },
     "RolePrefix": {
       "Description": "Prefix to apply to IAM role to make things a bit prettier (optional).",
-      "Type": "String"
-    },
-    "ServiceTld": {
-      "Default": "amazonaws.com",
-      "Description": "TLD of the IAMable service-name.",
       "Type": "String"
     }
   },
@@ -93,7 +79,10 @@
                       "Fn::Join": [
                         "",
                         [
-                          { "Ref": "BackupBucketArn" },
+                          "arn:",
+                          { "Ref": "AWS::Partition" },
+                          ":s3:::",
+                          { "Ref": "BackupBucketName" },
                           ""
                         ]
                       ]
@@ -102,40 +91,88 @@
                       "Fn::Join": [
                         "",
                         [
-                          { "Ref": "BackupBucketArn" },
+                          "arn:",
+                          { "Ref": "AWS::Partition" },
+                          ":s3:::",
+                          { "Ref": "BackupBucketName" },
                           "/*"
                         ]
                       ]
                     }
-                  ]
+                  ],
+                  "Sid": "BackupsEnablement"
+                },
+                { "Ref": "AWS::NoValue" }
+              ]
+            },
+            {
+              "Fn::If": [
+                "EnableCwaFetch",
+                {
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:ListBucket"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": [
+                    {
+                      "Fn::Join": [
+                        "",
+                        [
+                          "arn:",
+                          { "Ref": "AWS::Partition" },
+                          ":s3:::",
+                          { "Ref": "CloudwatchBucketName" },
+                          "/*"
+                        ]
+                      ]
+                    }
+                  ],
+                  "Sid": "CwaFetch"
                 },
                 { "Ref": "AWS::NoValue" }
               ]
             },
             {
               "Action": [
-                "cloudformation:DescribeStackResource"
+                "cloudformation:DescribeStackResource",
+                "cloudformation:SignalResource",
+                "ec2:DescribeInstances"
               ],
               "Effect": "Allow",
               "Resource": [
                 "*"
+              ],
+              "Sid": "ASGsupport"
+            },
+            {
+              "Fn::If": [
+                "EnableCwaFetch",
+                {
+                  "Action": [
+                    "logs:PutLogEvents",
+                    "logs:CreateLogStream"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": [
+                    "*"
+                  ],
+                  "Sid": "CwaLogAllow"
+                },
+                { "Ref": "AWS::NoValue" }
               ]
             }
           ],
           "Version": "2012-10-17"
         },
-        "Roles": [
-          { "Ref": "InstanceRole" }
-        ]
+        "Roles": [ { "Ref": "InstanceRole" } ]
       },
       "Type": "AWS::IAM::ManagedPolicy"
     },
     "InstanceProfile": {
       "Properties": {
         "Path": "/",
-        "Roles": [
-          { "Ref": "InstanceRole" }
-        ]
+        "Roles": [ { "Ref": "InstanceRole" } ]
       },
       "Type": "AWS::IAM::InstanceProfile"
     },
@@ -152,7 +189,7 @@
                     ".",
                     [
                       "ec2",
-                      { "Ref": "ServiceTld" }
+                      { "Ref": "AWS::URLSuffix" }
                     ]
                   ]
                 }
@@ -165,7 +202,7 @@
         "RoleName": {
           "Fn::If": [
             "PrettyRole",
-            { 
+            {
               "Fn::Join": [
                 "-",
                 [
