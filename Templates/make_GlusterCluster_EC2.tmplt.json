@@ -262,6 +262,7 @@
           "Parameters": [
             "PypiIndexUrl",
             "CfnGetPipUrl",
+            "WatchmakerAvailable",
             "WatchmakerEnvironment",
             "WatchmakerConfig",
             "WatchmakerS3Source",
@@ -276,6 +277,7 @@
             "default": "Miscellaneous Parameters"
           },
           "Parameters": [
+            "BackupBucketName",
             "CloudWatchAgentUrl"
           ]
         }
@@ -560,6 +562,7 @@
           },
           "configSets": {
             "init": [
+              "setup",
               {
                 "Fn::If": [
                   "UseAdminPubkeyURL",
@@ -589,6 +592,7 @@
               "GlusterSetup",
               "makeBrick",
               "makeVolume",
+              "finalize",
               "reboot"
             ]
           },
@@ -737,6 +741,54 @@
                     ]
                   ]
                 }
+              }
+            }
+          },
+          "finalize": {
+            "commands": {
+              "10-signal-success": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "/opt/aws/bin/cfn-signal -e 0",
+                      " --stack ",
+                      { "Ref": "AWS::StackName" },
+                      " --resource NodeFleet",
+                      {
+                        "Fn::If": [
+                          "AssignInstanceRole",
+                          {
+                            "Fn::Join": [
+                              "",
+                              [
+                                " --role ",
+                                { "Ref": "InstanceRoleName" }
+                              ]
+                            ]
+                          },
+                          ""
+                        ]
+                      },
+                      {
+                        "Fn::Join": [
+                          "",
+                          [
+                            " --url ",
+                            "https://cloudformation.",
+                            { "Ref": "AWS::Region" },
+                            ".",
+                            { "Ref": "AWS::URLSuffix" }
+                          ]
+                        ]
+                      },
+                      " --region ",
+                      { "Ref": "AWS::Region" },
+                      "\n"
+                    ]
+                  ]
+                },
+                "ignoreErrors": "true"
               }
             }
           },
@@ -1018,6 +1070,111 @@
               }
             }
           },
+          "setup": {
+            "files": {
+              "/etc/cfn/cfn-hup.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[main]\n",
+                      "stack=",
+                      { "Ref": "AWS::StackId" },
+                      "\n",
+                      "region=",
+                      { "Ref": "AWS::Region" },
+                      "\n",
+                      {
+                        "Fn::If": [
+                          "AssignInstanceRole",
+                          {
+                            "Fn::Join": [
+                              "",
+                              [
+                                "role=",
+                                { "Ref": "InstanceRoleName" },
+                                "\n"
+                              ]
+                            ]
+                          },
+                          ""
+                        ]
+                      },
+                      {
+                        "Fn::Join": [
+                          "",
+                          [
+                            "url=",
+                            "https://cloudformation.",
+                            { "Ref": "AWS::Region" },
+                            ".",
+                            { "Ref": "AWS::URLSuffix" }
+                          ]
+                        ]
+                      },
+                      "interval=1",
+                      "\n",
+                      "verbose=true",
+                      "\n"
+                    ]
+                  ]
+                },
+                "group": "root",
+                "mode": "000400",
+                "owner": "root"
+              },
+              "/etc/cfn/hooks.d/cfn-auto-reloader.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[cfn-auto-reloader-hook]\n",
+                      "triggers=post.update\n",
+                      "path=Resources.NodeLaunchConfig.Metadata\n",
+                      "action=/opt/aws/bin/cfn-init -v -c update",
+                      " --stack ",
+                      { "Ref": "AWS::StackName" },
+                      " --resource NodeLaunchConfig",
+                      {
+                        "Fn::If": [
+                          "AssignInstanceRole",
+                          {
+                            "Fn::Join": [
+                              "",
+                              [
+                                " --role ",
+                                { "Ref": "InstanceRoleName" }
+                              ]
+                            ]
+                          },
+                          ""
+                        ]
+                      },
+                      {
+                        "Fn::Join": [
+                          "",
+                          [
+                            " --url ",
+                            "https://cloudformation.",
+                            { "Ref": "AWS::Region" },
+                            ".",
+                            { "Ref": "AWS::URLSuffix" }
+                          ]
+                        ]
+                      },
+                      " --region ",
+                      { "Ref": "AWS::Region" },
+                      "\n",
+                      "runas=root\n"
+                    ]
+                  ]
+                },
+                "group": "root",
+                "mode": "000400",
+                "owner": "root"
+              }
+            }
+          },
           "startGlusterd": {
             "packages": {
               "yum": {
@@ -1223,7 +1380,7 @@
           ]
         },
         "ImageId": { "Ref": "AmiId" },
-        "InstanceMonitoring": "false",
+        "InstanceMonitoring": "true",
         "InstanceType": { "Ref": "InstanceType" },
         "KeyName": {
           "Fn::If": [
@@ -1316,9 +1473,37 @@
                 "}\n",
                 "\n",
                 "# Install packages\n",
-                "/opt/aws/bin/cfn-init -v -s ",
+                "/opt/aws/bin/cfn-init -v -c init",
+                " --stack ",
                 { "Ref": "AWS::StackId" },
-                " -r NodeLaunchConfig -c init",
+                " --resource NodeLaunchConfig",
+                {
+                  "Fn::If": [
+                    "AssignInstanceRole",
+                    {
+                      "Fn::Join": [
+                        "",
+                        [
+                          " --role ",
+                          { "Ref": "InstanceRoleName" }
+                        ]
+                      ]
+                    },
+                    ""
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                      "",
+                      [
+                        " --url ",
+                        "https://cloudformation.",
+                        { "Ref": "AWS::Region" },
+                        ".",
+                        { "Ref": "AWS::URLSuffix" }
+                      ]
+                    ]
+                },
                 "  --region ",
                 { "Ref": "AWS::Region" },
                 " || error_exit 'Failed to run cfn-init'\n",

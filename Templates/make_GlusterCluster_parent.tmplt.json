@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "This template stands up a basic, 2-node GlusterFs mirrored cluster and associated SG and EC2 components.",
+  "Description": "This template can be used to set up a GlusterFs cluster and associated SG, IAM and EC2 components.",
   "Metadata": {
     "AWS::CloudFormation::Interface": {
       "ParameterGroups": [
