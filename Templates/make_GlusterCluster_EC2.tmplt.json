@@ -1194,7 +1194,7 @@
           "Fn::If": [
             "AssignInstanceRole",
             { "Ref": "InstanceRoleProfile" },
-            { "Ref": "PowerUserProfile" }
+            { "Ref": "AWS::NoValue" }
           ]
         },
         "ImageId": { "Ref": "AmiId" },
@@ -1244,9 +1244,12 @@
                 "#!/bin/bash -xe\n",
                 "\n",
                 "# Populate /etc/hosts with local hotname\n",
-                "printf \"%s\\t%s %s\\n\" \n",
-                "\"$( hostname -I )\" \"$( hostname -f )\" \n",
+                "printf \"%s\\t%s %s\\n\" \\\n",
+                "\"$( hostname -I )\" \"$( hostname -f )\" \\\n",
                 "\"$( hostname -s )\" >> /etc/hosts\n",
+                "\n",
+                "# Deactivate IPv6 references in /etc/hosts\n",
+                "sed -i '/^:/s/^/## /' /etc/hosts\n",
                 "\n",
                 "# Extend any available LVM PVs\n",
                 "if [[ -x $( which pvs ) ]]\n",
@@ -1300,8 +1303,7 @@
                 "'\n",
                 "\n",
                 "# Rebooting so all config-options take effect\n",
-                "echo \"Rebooting so all config-options take effect...\"\n",
-                "systemctl reboot\n",
+                "shutdown -r +1 \"Rebooting so all config-options take effect...\"\n",
                 "\n",
                 "--===============3585321300151562773==--"
               ]
@@ -1343,61 +1345,6 @@
     },
     "NodeWaitHandle": {
       "Type": "AWS::CloudFormation::WaitConditionHandle"
-    },
-    "PowerUserProfile": {
-      "Condition": "CreateIam",
-      "Properties": {
-        "Path": "/",
-        "Roles": [
-          { "Ref": "PowerUserRole" }
-        ]
-      },
-      "Type": "AWS::IAM::InstanceProfile"
-    },
-    "PowerUserRole": {
-      "Condition": "CreateIam",
-      "Properties": {
-        "AssumeRolePolicyDocument": {
-          "Statement": [
-            {
-              "Action": [
-                "sts:AssumeRole"
-              ],
-              "Effect": "Allow",
-              "Principal": {
-                "Service": [
-                  {
-                    "Fn::Join": [
-                      ".",
-                      [
-                        "ec2",
-                        { "Ref": "AWS::URLSuffix" }
-                      ]
-                    ]
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "Path": "/",
-        "Policies": [
-          {
-            "PolicyDocument": {
-              "Statement": [
-                {
-                  "Effect": "Allow",
-                  "NotAction": "iam:*",
-                  "Resource": "*",
-                  "Sid": "PowerUserStmt"
-                }
-              ]
-            },
-            "PolicyName": "PowerUserPolicy"
-          }
-        ]
-      },
-      "Type": "AWS::IAM::Role"
     }
   }
 }
