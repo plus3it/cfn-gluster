@@ -565,15 +565,11 @@
               "watchmaker-install",
               "watchmaker-launch",
               "installGlusterd",
-              "startGlusterd"
-            ],
-            "makeNode": [
-              {
-                "ConfigSet": "init"
-              },
+              "startGlusterd",
               "GlusterSetup",
               "makeBrick",
-              "makeVolume"
+              "makeVolume",
+              "reboot"
             ]
           },
           "cw-agent-install": {
@@ -993,6 +989,13 @@
               }
             }
           },
+          "reboot": {
+            "commands": {
+              "10-reboot": {
+                "command": "shutdown -r +1 \"Rebooting so all config-options take effect...\" &"
+              }
+            }
+          },
           "startGlusterd": {
             "packages": {
               "yum": {
@@ -1293,7 +1296,7 @@
                 "# Install packages\n",
                 "/opt/aws/bin/cfn-init -v -s ",
                 { "Ref": "AWS::StackId" },
-                " -r NodeLaunchConfig -c makeNode",
+                " -r NodeLaunchConfig -c init",
                 "  --region ",
                 { "Ref": "AWS::Region" },
                 " || error_exit 'Failed to run cfn-init'\n",
@@ -1301,9 +1304,6 @@
                 "/opt/aws/bin/cfn-signal -e 0 '",
                 { "Ref": "NodeWaitHandle" },
                 "'\n",
-                "\n",
-                "# Rebooting so all config-options take effect\n",
-                "shutdown -r +1 \"Rebooting so all config-options take effect...\"\n",
                 "\n",
                 "--===============3585321300151562773==--"
               ]
