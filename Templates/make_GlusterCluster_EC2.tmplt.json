@@ -797,6 +797,8 @@
                       "   gluster peer probe ${HOST} || err_exit \"Peer-probe failed for ${HOST}\"\n",
                       "done\n",
                       "\n",
+                      "sleep 15\n",
+                      "\n",
                       "# Create a replicated volume\n",
                       "printf \"Attempting to create %s... \" \"${VOLNAME}\"\n",
                       "if [[ $(gluster volume info \"${VOLNAME}\" > /dev/null 2>&1 )$? -eq 0 ]]\n",
@@ -992,7 +994,7 @@
           "reboot": {
             "commands": {
               "10-reboot": {
-                "command": "shutdown -r +1 \"Rebooting so all config-options take effect...\" &"
+                "command": "shutdown -r +2 \"Rebooting so all config-options take effect...\" &"
               }
             }
           },
