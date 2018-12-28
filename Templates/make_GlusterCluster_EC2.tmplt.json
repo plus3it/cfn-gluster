@@ -824,7 +824,7 @@
           "installGlusterd": {
             "packages": {
               "yum": {
-                "centos-release-gluster41": []
+                "centos-release-gluster5": []
               }
             }
           },
