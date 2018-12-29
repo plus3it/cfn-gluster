@@ -13,6 +13,9 @@ matrix:
     - env:
         - TESTENV=json-tool
         - TESTCOMMAND="find $TRAVIS_BUILD_DIR -name '*.json' -type f -print0 | xargs -0 -n1 -I {} -t jq --exit-status . {} > /dev/null"
+    - env:
+        - TESTENV=cfn-lint
+        - TESTCOMMAND="find $TRAVIS_BUILD_DIR -name '*.json' -type f -print0 | xargs -0 -n1 -I {} -t cfn-lint -i E1029 -t {} > /dev/null"
 
 before_install:
   - echo $TESTCOMMAND
@@ -22,6 +25,8 @@ install:
   # Download json parser
   - curl -sO http://stedolan.github.io/jq/download/linux64/jq
   - chmod +x $PWD/jq
+  - pip install --user --upgrade pip==9.0.3
+  - pip install --user cfn-lint
 
 script:
   - bash -c "$TESTCOMMAND"
