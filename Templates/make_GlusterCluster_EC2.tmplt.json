@@ -6,9 +6,6 @@
         { "Fn::Equals": [ { "Ref": "InstanceRoleProfile" }, "" ] }
       ]
     },
-    "CreateIam": {
-      "Fn::Equals": [ { "Ref": "InstanceRoleProfile" }, "" ]
-    },
     "InstallCloudWatchAgent": {
       "Fn::Not": [
         { "Fn::Equals": [ { "Ref": "CloudWatchAgentUrl" }, "" ] }
@@ -50,16 +47,6 @@
                 "t3"
               ]
             }
-          ]
-        }
-      ]
-    },
-    "Replication": {
-      "Fn::Not": [
-        {
-          "Fn::Equals": [
-            { "Ref": "ReplicaNum" },
-            "1"
           ]
         }
       ]
@@ -294,7 +281,7 @@
     "AmiId": {
       "AllowedPattern": "^ami-[0-9a-z]{8}$|^ami-[0-9a-z]{17}$",
       "Description": "ID of the AMI to launch",
-      "Type": "String"
+      "Type": "AWS::EC2::Image::Id"
     },
     "BackupBucketName": {
       "Description": "Name of S3 Bucket used to host Gluster backups",
@@ -503,7 +490,7 @@
         "Tags": [
           {
             "Key": "Name",
-            "PropagateAtLaunch": "true",
+            "PropagateAtLaunch": true,
             "Value": {
               "Fn::Join": [
                 "-",
@@ -1335,7 +1322,7 @@
         }
       },
       "Properties": {
-        "AssociatePublicIpAddress": "false",
+        "AssociatePublicIpAddress": false,
         "BlockDeviceMappings": [
           {
             "DeviceName": "/dev/sda1",
@@ -1366,7 +1353,7 @@
               ]
             },
             "Ebs": {
-              "DeleteOnTermination": "true",
+              "DeleteOnTermination": true,
               "VolumeSize": { "Ref": "SharedVolumeSize" },
               "VolumeType": { "Ref": "SharedVolumeType" }
             }
@@ -1380,7 +1367,7 @@
           ]
         },
         "ImageId": { "Ref": "AmiId" },
-        "InstanceMonitoring": "true",
+        "InstanceMonitoring": true,
         "InstanceType": { "Ref": "InstanceType" },
         "KeyName": {
           "Fn::If": [
@@ -1425,6 +1412,36 @@
                 "\n",
                 "#!/bin/bash -xe\n",
                 "\n",
+                {
+                  "Fn::If": [
+                    "UseComputerName",
+                    {
+                      "Fn::Join": [
+                        "",
+                        [
+                          "# Override DCHP-set hostname\n",
+                          "hostnamectl set-hostname $( echo ",
+                          { "Ref": "WatchmakerComputerName" },
+                          "| sed \"s/",
+                          {
+                            "Fn::Select": [
+                              "0",
+                              {
+                                "Fn::Split": [
+                                  ".",
+                                  { "Ref": "WatchmakerComputerName" }
+                                ]
+                              }
+                            ]
+                          },
+                          "/&-$( printf '%02x' $( hostname -i | sed 's/\\./ /g') )/\" )\n",
+                          "\n"
+                        ]
+                      ]
+                    },
+                    ""
+                  ]
+                },
                 "# Populate /etc/hosts with local hotname\n",
                 "printf \"%s\\t%s %s\\n\" \\\n",
                 "\"$( hostname -I )\" \"$( hostname -f )\" \\\n",
