@@ -1,4 +1,5 @@
-language: shell
+language: python
+python: 3.6
 env:
   global:
     - LD_PRELOAD=/lib/x86_64-linux-gnu/libSegFault.so
@@ -25,8 +26,7 @@ install:
   # Download json parser
   - curl -sO http://stedolan.github.io/jq/download/linux64/jq
   - chmod +x $PWD/jq
-  - pip install --user --upgrade pip==9.0.3
-  - pip install --user cfn-lint
+  - pip install cfn-lint
 
 script:
   - bash -c "$TESTCOMMAND"
