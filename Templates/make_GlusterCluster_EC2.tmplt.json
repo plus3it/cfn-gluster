@@ -283,6 +283,15 @@
       "Description": "ID of the AMI to launch",
       "Type": "AWS::EC2::Image::Id"
     },
+    "AssociatePublicIpAddress": {
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Default": "false",
+      "Description": "Whether to give each Gluster node a public IP address (not normally required)",
+      "Type": "String"
+    },
     "BackupBucketName": {
       "Description": "Name of S3 Bucket used to host Gluster backups",
       "Type": "String"
@@ -1322,7 +1331,7 @@
         }
       },
       "Properties": {
-        "AssociatePublicIpAddress": false,
+        "AssociatePublicIpAddress": { "Ref": "AssociatePublicIpAddress" },
         "BlockDeviceMappings": [
           {
             "DeviceName": "/dev/sda1",
