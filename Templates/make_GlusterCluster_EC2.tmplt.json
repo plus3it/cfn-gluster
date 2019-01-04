@@ -316,6 +316,12 @@
       "MinValue": "1",
       "Type": "Number"
     },
+    "GlusterReleasePkg": {
+      "AllowedPattern": "^.*-release-gluster[0-9].*$",
+      "Default": "centos-release-gluster5",
+      "Description": "Name of the gluster repository-definition RPM containing the desired GlusterFS packages",
+      "Type": "String"
+    },
     "InstanceRoleName": {
       "Default": "",
       "Description": "(Optional) IAM instance role to apply to the instance",
@@ -583,7 +589,7 @@
                   { "Ref": "AWS::NoValue" }
                 ]
               },
-              "installGlusterd",
+              "installGlusterRelease",
               "startGlusterd",
               "GlusterSetup",
               "makeBrick",
@@ -889,10 +895,19 @@
               }
             }
           },
-          "installGlusterd": {
-            "packages": {
-              "yum": {
-                "centos-release-gluster5": []
+          "installGlusterRelease": {
+            "commands": {
+              "00-AddGlusterReleas": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "yum install -y ",
+                      { "Ref": "GlusterReleasePkg" },
+                       "\n"
+                    ]
+                  ]
+                }
               }
             }
           },

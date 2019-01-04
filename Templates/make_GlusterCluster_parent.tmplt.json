@@ -97,6 +97,12 @@
       "MinValue": "1",
       "Type": "Number"
     },
+    "GlusterReleasePkg": {
+      "AllowedPattern": "^.*-release-gluster[0-9].*$",
+      "Default": "centos-release-gluster5",
+      "Description": "Name of the gluster repository-definition RPM containing the desired GlusterFS packages",
+      "Type": "String"
+    },
     "GlusFleetTemplateUri": {
       "AllowedPattern": "^$|^http://.*$|^https://.*$",
       "Description": "URI for the template that creates Gluster's EC2 node-components.",
@@ -272,6 +278,7 @@
           "CfnGetPipUrl": { "Ref": "CfnGetPipUrl" },
           "CloudWatchAgentUrl": { "Ref": "CloudWatchAgentUrl" },
           "DistributionNum": { "Ref": "DistributionNum" },
+          "GlusterReleasePkg": { "Ref": "GlusterReleasePkg" },
           "InstanceRoleName": { "Fn::GetAtt": [ "IamRes", "Outputs.InstanceRoleName" ] },
           "InstanceRoleProfile": { "Fn::GetAtt": [ "IamRes", "Outputs.InstanceRoleProfile" ] },
           "InstanceType": { "Ref": "InstanceType" },
