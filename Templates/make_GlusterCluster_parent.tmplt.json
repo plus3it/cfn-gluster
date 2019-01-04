@@ -144,6 +144,12 @@
       "Description": "Name of an existing EC2 KeyPair to enable SSH access to the instances",
       "Type": "String"
     },
+    "MgtSgs": {
+      "AllowedPattern": "^$|^sg-[0-9a-z]{8}$|^sg-[0-9a-z]{17}$",
+      "Default": "",
+      "Description": "Security group(s) that need management access to the Gluster nodes' CLIs",
+      "Type": "List<AWS::EC2::SecurityGroup::Id>"
+    },
     "ProvisionUser": {
       "AllowedPattern": "[a-z0-9-]{6,12}",
       "ConstraintDescription": "Alphanumeric string between 6 and 12 characters.",
@@ -293,6 +299,12 @@
             "Fn::Join": [
               ",",
               [
+                {
+                  "Fn::Join": [
+                    ",",
+                    { "Ref": "MgtSgs" }
+                  ]
+                },
                 { "Fn::GetAtt": [ "SgRes", "Outputs.NasSg" ] }
               ]
             ]
