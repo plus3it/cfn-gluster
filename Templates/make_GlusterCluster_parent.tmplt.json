@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "This template stands up a basic, 2-node GlusterFs mirrored cluster and associated SG and EC2 components.",
+  "Description": "This template can be used to set up a GlusterFs cluster and associated SG, IAM and EC2 components.",
   "Metadata": {
     "AWS::CloudFormation::Interface": {
       "ParameterGroups": [
@@ -11,49 +11,47 @@
           "Parameters": [
             "SgTemplateUri",
             "IamTemplateUri",
-            "GlusNodeTemplateUri"
+            "GlusFleetTemplateUri"
           ]
         },
         {
           "Label": {
-            "default": "EC2 Config"
+            "default": "EC2-Fleet Config"
           },
           "Parameters": [
             "AmiId",
-            "ClusterInstanceType",
-            "ShareVolDev",
-            "ShareVolSize",
-            "ShareVolType",
-            "GlusterSubnets",
-            "ProvisionUser",
-            "KeyPairName",
-            "AdminPubkeyURL"
-          ]
-        },
-        {
-          "Label": {
-            "default": "Gluster Config"
-          },
-          "Parameters": [
-            "TargetVPC",
-            "GlusDomName",
-            "GlusNodeName",
-            "GlusterOsprepScript",
-            "GlusterGfsScript",
-            "ConsumerApplication"
-          ]
-        },
-        {
-          "Label": {
-            "default": "Misc. Config. Items"
-          },
-          "Parameters": [
-            "ServiceTld",
+            "InstanceType",
+            "RootVolumeSize",
+            "SharedVolumeSize",
+            "SharedVolumeType",
             "RolePrefix",
-            "EpelRepo",
-            "PipRpm",
-            "PyStache",
-            "BackupBucketArn"
+            "ProvisionUser",
+            "KeyName",
+            "AdminPubkeyURL",
+            "TargetVPC",
+            "SubnetList",
+            "BackupBucketName",
+            "CloudwatchBucketName",
+            "CloudWatchAgentUrl",
+            "DistributionNum",
+            "ReplicaNum"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Watchmaker Config"
+          },
+          "Parameters": [
+            "WatchmakerAvailable",
+            "WatchmakerEnvironment",
+            "WatchmakerConfig",
+            "WatchmakerS3Source",
+            "WatchmakerComputerName",
+            "WatchmakerOuPath",
+            "WatchmakerAdminGroups",
+            "WatchmakerAdminUsers",
+            "CfnGetPipUrl",
+            "PypiIndexUrl"
           ]
         }
       ]
@@ -62,8 +60,8 @@
   "Outputs": {},
   "Parameters": {
     "AdminPubkeyURL": {
-      "AllowedPattern": "^$|^http://.*$|^https://.*$",
-      "Description": "URL to the file containing the admin users' SSH public keys.",
+      "AllowedPattern": "^http[s]?://.*|^$",
+      "Description": "(Optional) URL of file containing admin group's SSH public-keys",
       "Type": "String"
     },
     "AmiId": {
@@ -71,18 +69,60 @@
       "Description": "ID of the AMI to launch",
       "Type": "String"
     },
-    "BackupBucketArn": {
-      "Description": "S3 Bucket to host Gluster backups (not currently implemented).",
+    "BackupBucketName": {
+      "Description": "Name of S3 Bucket used to host Gluster backups",
       "Type": "String"
     },
-    "ClusterInstanceType": {
+    "CfnGetPipUrl": {
+      "AllowedPattern": "^http[s]?://.*\\.py$",
+      "Default": "https://bootstrap.pypa.io/get-pip.py",
+      "Description": "URL to get-pip.py",
+      "Type": "String"
+    },
+    "CloudWatchAgentUrl": {
+      "AllowedPattern": "^$|^s3://.*$",
+      "Default": "",
+      "Description": "(Optional) S3 URL to CloudWatch Agent installer. Example: s3://amazoncloudwatch-agent/linux/amd64/latest/AmazonCloudWatchAgent.zip",
+      "Type": "String"
+    },
+    "CloudwatchBucketName": {
+      "Description": "Name of the S3 Bucket hosting the CloudWatch agent archive files",
+      "Type": "String"
+    },
+    "DistributionNum": {
+      "ConstraintDescription": "must be 1 - 9",
+      "Default": "1",
+      "Description": "Number of distribution.(1-9)",
+      "MaxValue": "9",
+      "MinValue": "1",
+      "Type": "Number"
+    },
+    "GlusterReleasePkg": {
+      "AllowedPattern": "^.*-release-gluster[0-9].*$",
+      "Default": "centos-release-gluster5",
+      "Description": "Name of the gluster repository-definition RPM containing the desired GlusterFS packages",
+      "Type": "String"
+    },
+    "GlusFleetTemplateUri": {
+      "AllowedPattern": "^$|^http://.*$|^https://.*$",
+      "Description": "URI for the template that creates Gluster's EC2 node-components.",
+      "Type": "String"
+    },
+    "IamTemplateUri": {
+      "AllowedPattern": "^$|^http://.*$|^https://.*$",
+      "Description": "URI for the template that creates Gluster's IAM components.",
+      "Type": "String"
+    },
+    "InstanceType": {
       "AllowedValues": [
-        "t2.micro",
         "t2.small",
         "t2.medium",
         "t2.large",
         "t2.xlarge",
-        "t2.2xlarge",
+        "t3.small",
+        "t3.medium",
+        "t3.large",
+        "t3.xlarge",
         "m3.medium",
         "m3.large",
         "m3.xlarge",
@@ -91,113 +131,72 @@
         "m4.xlarge",
         "m4.2xlarge",
         "m4.4xlarge",
-        "m4.10xlarge",
-        "m4.16xlarge"
+        "m5.large",
+        "m5.xlarge",
+        "m5.2xlarge",
+        "m5.4xlarge"
       ],
-      "Default": "t2.large",
-      "Description": "Amazon Linux AMI instance type: https://aws.amazon.com/ec2/instance-types/",
+      "Default": "t2.small",
+      "Description": "GlusterFS node EC2 instance type",
       "Type": "String"
     },
-    "ConsumerApplication": {
-      "Description": "Name of the application that the cluster is hosting data for.",
+    "KeyName": {
+      "Description": "Name of an existing EC2 KeyPair to enable SSH access to the instances",
       "Type": "String"
     },
-    "EpelRepo": {
-      "AllowedPattern": "^[a-z][a-z0-9-]*$",
-      "ConstraintDescription": "An alphanumeric string that represents the EPEL yum repo's label.",
-      "Default": "epel",
-      "Description": "Name of network's EPEL repo.",
-      "Type": "String"
-    },
-    "GlusDomName": {
-      "Description": "FQDN to be applied to Gluster member-nodes.",
-      "Type": "String"
-    },
-    "GlusNodeName": {
-      "Description": "Base node-name to derive individual Gluster node-names.",
-      "Type": "String"
-    },
-    "GlusNodeTemplateUri": {
-      "AllowedPattern": "^$|^http://.*$|^https://.*$",
-      "Description": "URI for the template that creates Gluster's EC2 node-components.",
-      "Type": "String"
-    },
-    "GlusterGfsScript": {
-      "AllowedPattern": "^$|^http://.*$|^https://.*$",
-      "Description": "URL to script that configures a Gluster filesystem.",
-      "Type": "String"
-    },
-    "GlusterOsprepScript": {
-      "AllowedPattern": "^$|^http://.*$|^https://.*$",
-      "Description": "URL to script that prepares the EC2 instance's host OS for hosting a Gluster filesystem.",
-      "Type": "String"
-    },
-    "GlusterSubnets": {
-      "Description": "List of subnets to deploy Gluster instances into.",
-      "Type": "List<AWS::EC2::Subnet::Id>"
-    },
-    "IamTemplateUri": {
-      "AllowedPattern": "^$|^http://.*$|^https://.*$",
-      "Description": "URI for the template that creates Gluster's IAM components.",
-      "Type": "String"
-    },
-    "KeyPairName": {
-      "ConstraintDescription": "Name can contain only ASCII characters.",
-      "Description": "Name of an existing EC2 KeyPair: https://console.aws.amazon.com/ec2/v2/home#KeyPairs:",
-      "Type": "AWS::EC2::KeyPair::KeyName"
-    },
-    "PipRpm": {
-      "Default": "python2-pip",
-      "Description": "Name of preferred pip RPM.",
-      "Type": "String"
+    "MgtSgs": {
+      "AllowedPattern": "^$|^sg-[0-9a-z]{8}$|^sg-[0-9a-z]{17}$",
+      "Default": "",
+      "Description": "Security group(s) that need management access to the Gluster nodes' CLIs",
+      "Type": "List<AWS::EC2::SecurityGroup::Id>"
     },
     "ProvisionUser": {
-      "AllowedPattern": "[a-z0-9]{6,12}+",
+      "AllowedPattern": "[a-z0-9-]{6,12}",
       "ConstraintDescription": "Alphanumeric string between 6 and 12 characters.",
-      "Default": "glusbuild",
-      "Description": "Default login user account name.",
+      "Default": "ec2-user",
+      "Description": "Name for remote-administration account",
       "Type": "String"
     },
-    "PyStache": {
-      "Default": "pystache",
-      "Description": "Name of preferred pystache RPM.",
+    "PypiIndexUrl": {
+      "AllowedPattern": "^http[s]?://.*$",
+      "Default": "https://pypi.org/simple",
+      "Description": "URL to the PyPi Index",
       "Type": "String"
+    },
+    "ReplicaNum": {
+      "ConstraintDescription": "must be 1 - 9",
+      "Default": "2",
+      "Description": "Number of replica.(1-9; 1 means no replica.)",
+      "MaxValue": "9",
+      "MinValue": "1",
+      "Type": "Number"
     },
     "RolePrefix": {
       "Description": "Prefix to apply to IAM role to make things a bit prettier (optional).",
       "Type": "String"
     },
-    "ServiceTld": {
-      "Default": "amazonaws.com",
-      "Description": "TLD of the IAMable service-name.",
-      "Type": "String"
+    "RootVolumeSize": {
+      "ConstraintDescription": "Must be between 20GiB and 16384GiB.",
+      "Default": "20",
+      "Description": "Size in GB of the instance's root EBS volume.",
+      "MaxValue": "16384",
+      "MinValue": "20",
+      "Type": "Number"
     },
     "SgTemplateUri": {
       "AllowedPattern": "^$|^http://.*$|^https://.*$",
       "Description": "URI for the template that creates Gluster's SecurityGroup components.",
       "Type": "String"
     },
-    "ShareVolDev": {
-      "AllowedValues": [
-        "/dev/xvdf",
-        "/dev/xvdg",
-        "/dev/xvdh",
-        "/dev/xvdi",
-        "/dev/xvdj"
-      ],
-      "Default": "/dev/xvdf",
-      "Description": "Device to mount as Gluster's shared-storage",
-      "Type": "String"
-    },
-    "ShareVolSize": {
-      "ConstraintDescription": "Must be between 1GB and 16384GB.",
-      "Default": "20",
-      "Description": "Size in GB of the EBS volume to create.",
+    "SharedVolumeSize": {
+      "ConstraintDescription": "Must be between 10GiB and 16384GiB.",
+      "Default": "10",
+      "Description": "Size in GB of the EBS volume to create. Ignored if \"SharedVolumeDevice\" is blank",
       "MaxValue": "16384",
-      "MinValue": "20",
+      "MinValue": "10",
       "Type": "Number"
     },
-    "ShareVolType": {
+    "SharedVolumeType": {
       "AllowedValues": [
         "gp2",
         "io1",
@@ -206,152 +205,146 @@
         "standard"
       ],
       "Default": "gp2",
-      "Description": "Type of EBS volume to create for shared storage.",
+      "Description": "Type of EBS volume to create. Ignored if \"SharedVolumeDevice\" is blank",
       "Type": "String"
+    },
+    "SubnetList": {
+      "Description": "Subnets to which GlusterFS nodes may belong.",
+      "Type": "List<AWS::EC2::Subnet::Id>"
     },
     "TargetVPC": {
       "AllowedPattern": "^vpc-[0-9a-f]*$",
-      "Description": "ID of the VPC to deploy GlusterFS components into.",
+      "Description": "ID of the VPC to deploy Confluence components into.",
       "Type": "AWS::EC2::VPC::Id"
+    },
+    "WatchmakerAdminGroups": {
+      "Default": "",
+      "Description": "(Optional) Colon-separated list of domain groups that should have admin permissions on the EC2 instance",
+      "Type": "String"
+    },
+    "WatchmakerAdminUsers": {
+      "Default": "",
+      "Description": "(Optional) Colon-separated list of domain users that should have admin permissions on the EC2 instance",
+      "Type": "String"
+    },
+    "WatchmakerAvailable": {
+      "AllowedValues": [
+        "false",
+        "true"
+      ],
+      "Default": "true",
+      "Description": "Specify if Watchmaker is available (if \"false\" all other Watchmaker-related parms will be ignored).",
+      "Type": "String"
+    },
+    "WatchmakerComputerName": {
+      "Default": "",
+      "Description": "(Optional) Sets the hostname/computername within the OS",
+      "Type": "String"
+    },
+    "WatchmakerConfig": {
+      "AllowedPattern": "^$|^http[s]?://.*$",
+      "Default": "",
+      "Description": "(Optional) URL to a Watchmaker config file",
+      "Type": "String"
+    },
+    "WatchmakerEnvironment": {
+      "AllowedValues": [
+        "",
+        "dev",
+        "test",
+        "prod"
+      ],
+      "Default": "dev",
+      "Description": "Environment in which the instance is being deployed",
+      "Type": "String"
+    },
+    "WatchmakerOuPath": {
+      "AllowedPattern": "^$|^(OU=.+,)+(DC=.+)+$",
+      "Default": "",
+      "Description": "(Optional) DN of the OU to place the instance when joining a domain. If blank and \"WatchmakerEnvironment\" enforces a domain join, the instance will be placed in a default container. Leave blank if not joining a domain, or if \"WatchmakerEnvironment\" is \"false\"",
+      "Type": "String"
+    },
+    "WatchmakerS3Source": {
+      "AllowedValues": [
+        "false",
+        "true"
+      ],
+      "Default": "false",
+      "Description": "Flag that tells watchmaker to use its instance role to retrieve watchmaker content from S3",
+      "Type": "String"
     }
   },
   "Resources": {
-    "GfsN0Res": {
+    "FleetRes": {
       "Properties": {
         "Parameters": {
           "AdminPubkeyURL": { "Ref": "AdminPubkeyURL" },
           "AmiId": { "Ref": "AmiId" },
-          "CfnEndpointUrl": {
-            "Fn::Join": [
-              ".",
-              [
-                "https://cloudformation",
-                { "Ref": "AWS::Region" },
-                { "Ref": "ServiceTld" }
-              ]
-            ]
-          },
-          "ClusterInstanceType": { "Ref": "ClusterInstanceType" },
-          "ClusterSecurityGroup": {
+          "BackupBucketName": "",
+          "CfnGetPipUrl": { "Ref": "CfnGetPipUrl" },
+          "CloudWatchAgentUrl": { "Ref": "CloudWatchAgentUrl" },
+          "DistributionNum": { "Ref": "DistributionNum" },
+          "GlusterReleasePkg": { "Ref": "GlusterReleasePkg" },
+          "InstanceRoleName": { "Fn::GetAtt": [ "IamRes", "Outputs.InstanceRoleName" ] },
+          "InstanceRoleProfile": { "Fn::GetAtt": [ "IamRes", "Outputs.InstanceRoleProfile" ] },
+          "InstanceType": { "Ref": "InstanceType" },
+          "KeyName": { "Ref": "KeyName" },
+          "ProvisionUser": { "Ref": "ProvisionUser" },
+          "PypiIndexUrl": { "Ref": "PypiIndexUrl" },
+          "ReplicaNum": { "Ref": "ReplicaNum" },
+          "RootVolumeSize": { "Ref": "RootVolumeSize" },
+          "SharedVolumeSize": { "Ref": "SharedVolumeSize" },
+          "SharedVolumeType": { "Ref": "SharedVolumeType" },
+          "SecurityGroupIds": { 
             "Fn::Join": [
               ",",
               [
+                {
+                  "Fn::Join": [
+                    ",",
+                    { "Ref": "MgtSgs" }
+                  ]
+                },
                 { "Fn::GetAtt": [ "SgRes", "Outputs.NasSg" ] }
               ]
             ]
           },
-          "ConsumerApplication": { "Ref": "ConsumerApplication" },
-          "EpelRepo": { "Ref": "EpelRepo" },
-          "GlusDomName": { "Ref": "GlusDomName" },
-          "GlusNodeName": { "Ref": "GlusNodeName" },
-          "GlusNodeNumber": "00",
-          "GlusterGfsScript": { "Ref": "GlusterGfsScript" },
-          "GlusterPartnerIp": "",
-          "GlusterOsprepScript": { "Ref": "GlusterOsprepScript" },
-          "GlusterSubnets": { "Fn::Select": [ "0", { "Ref": "GlusterSubnets" } ] },
-          "InstanceProfile": {
+          "SubnetList": {
             "Fn::Join": [
               ",",
-              [
-                { "Fn::GetAtt": [ "IamRes", "Outputs.InstanceRoleProfile" ] }
-              ]
+              { "Ref": "SubnetList" }
             ]
           },
-          "KeyPairName": { "Ref": "KeyPairName" },
-          "PipRpm": { "Ref": "PipRpm" },
-          "ProvisionUser": { "Ref": "ProvisionUser" },
-          "PyStache": { "Ref": "PyStache" },
-          "ShareVolDev": { "Ref": "ShareVolDev" },
-          "ShareVolSize": { "Ref": "ShareVolSize" },
-          "ShareVolType": { "Ref": "ShareVolType" }
+          "WatchmakerAdminGroups": { "Ref": "WatchmakerAdminGroups" },
+          "WatchmakerAdminUsers": { "Ref": "WatchmakerAdminUsers" },
+          "WatchmakerAvailable": { "Ref": "WatchmakerAvailable" },
+          "WatchmakerComputerName": { "Ref": "WatchmakerComputerName" },
+          "WatchmakerConfig": { "Ref": "WatchmakerConfig" },
+          "WatchmakerEnvironment": { "Ref": "WatchmakerEnvironment" },
+          "WatchmakerOuPath": { "Ref": "WatchmakerOuPath" },
+          "WatchmakerS3Source": { "Ref": "WatchmakerS3Source" }
         },
-        "TemplateURL": { "Ref": "GlusNodeTemplateUri" }
-      },
-      "Type": "AWS::CloudFormation::Stack"
-    },
-    "GfsN1Res": {
-      "Properties": {
-        "Parameters": {
-          "AdminPubkeyURL": { "Ref": "AdminPubkeyURL" },
-          "AmiId": { "Ref": "AmiId" },
-          "CfnEndpointUrl": {
-            "Fn::Join": [
-              ".",
-              [
-                "https://cloudformation",
-                { "Ref": "AWS::Region" },
-                { "Ref": "ServiceTld" }
-              ]
-            ]
-          },
-          "ClusterInstanceType": { "Ref": "ClusterInstanceType" },
-          "ClusterSecurityGroup": {
-            "Fn::Join": [
-              ",",
-              [
-                { "Fn::GetAtt": [ "SgRes", "Outputs.NasSg" ] }
-              ]
-            ]
-          },
-          "ConsumerApplication": { "Ref": "ConsumerApplication" },
-          "EpelRepo": { "Ref": "EpelRepo" },
-          "GlusDomName": { "Ref": "GlusDomName" },
-          "GlusNodeName": { "Ref": "GlusNodeName" },
-          "GlusNodeNumber": "01",
-          "GlusterGfsScript": { "Ref": "GlusterGfsScript" },
-          "GlusterPartnerIp": {
-            "Fn::Join": [
-              ",",
-              [
-                { "Fn::GetAtt": [ "GfsN0Res", "Outputs.GfsNodeIp" ] }
-              ]
-            ]
-          },
-          "GlusterOsprepScript": { "Ref": "GlusterOsprepScript" },
-          "GlusterSubnets": { "Fn::Select": [ "1", { "Ref": "GlusterSubnets" } ] },
-          "InstanceProfile": {
-            "Fn::Join": [
-              ",",
-              [
-                { "Fn::GetAtt": [ "IamRes", "Outputs.InstanceRoleProfile" ] }
-              ]
-            ]
-          },
-          "KeyPairName": { "Ref": "KeyPairName" },
-          "PipRpm": { "Ref": "PipRpm" },
-          "ProvisionUser": { "Ref": "ProvisionUser" },
-          "PyStache": { "Ref": "PyStache" },
-          "ShareVolDev": { "Ref": "ShareVolDev" },
-          "ShareVolSize": { "Ref": "ShareVolSize" },
-          "ShareVolType": { "Ref": "ShareVolType" }
-        },
-        "TemplateURL": { "Ref": "GlusNodeTemplateUri" }
+        "TemplateURL": { "Ref": "GlusFleetTemplateUri" }
       },
       "Type": "AWS::CloudFormation::Stack"
     },
     "IamRes": {
       "Properties": {
         "Parameters": {
-          "BackupBucketArn": { "Ref": "BackupBucketArn" },
-          "RolePrefix": { "Ref": "RolePrefix" },
-          "ServiceTld": { "Ref": "ServiceTld" }
+          "BackupBucketName": { "Ref": "BackupBucketName" },
+          "CloudwatchBucketName": { "Ref": "CloudwatchBucketName"},
+          "RolePrefix": { "Ref": "RolePrefix" }
         },
-        "TemplateURL": {
-          "Ref": "IamTemplateUri"
-        }
+        "TemplateURL": { "Ref": "IamTemplateUri" }
       },
       "Type": "AWS::CloudFormation::Stack"
     },
     "SgRes": {
       "Properties": {
         "Parameters": {
-          "TargetVPC": {
-            "Ref": "TargetVPC"
-          }
+          "TargetVPC": { "Ref": "TargetVPC" }
         },
-        "TemplateURL": {
-          "Ref": "SgTemplateUri"
-        }
+        "TemplateURL": { "Ref": "SgTemplateUri" }
       },
       "Type": "AWS::CloudFormation::Stack"
     }

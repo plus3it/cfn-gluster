@@ -6,9 +6,6 @@
         { "Fn::Equals": [ { "Ref": "InstanceRoleProfile" }, "" ] }
       ]
     },
-    "CreateIam": {
-      "Fn::Equals": [ { "Ref": "InstanceRoleProfile" }, "" ]
-    },
     "InstallCloudWatchAgent": {
       "Fn::Not": [
         { "Fn::Equals": [ { "Ref": "CloudWatchAgentUrl" }, "" ] }
@@ -50,16 +47,6 @@
                 "t3"
               ]
             }
-          ]
-        }
-      ]
-    },
-    "Replication": {
-      "Fn::Not": [
-        {
-          "Fn::Equals": [
-            { "Ref": "ReplicaNum" },
-            "1"
           ]
         }
       ]
@@ -108,6 +95,9 @@
       "Fn::Not": [
         { "Fn::Equals": [ { "Ref": "WatchmakerConfig" }, "" ] }
       ]
+    },
+    "UseWatchmaker": {
+      "Fn::Equals": [ { "Ref": "WatchmakerAvailable" }, "true" ]
     }
   },
   "Description": "GlusterFS storage cluster CloudFormation template file.",
@@ -259,6 +249,7 @@
           "Parameters": [
             "PypiIndexUrl",
             "CfnGetPipUrl",
+            "WatchmakerAvailable",
             "WatchmakerEnvironment",
             "WatchmakerConfig",
             "WatchmakerS3Source",
@@ -273,6 +264,7 @@
             "default": "Miscellaneous Parameters"
           },
           "Parameters": [
+            "BackupBucketName",
             "CloudWatchAgentUrl"
           ]
         }
@@ -289,6 +281,15 @@
     "AmiId": {
       "AllowedPattern": "^ami-[0-9a-z]{8}$|^ami-[0-9a-z]{17}$",
       "Description": "ID of the AMI to launch",
+      "Type": "AWS::EC2::Image::Id"
+    },
+    "AssociatePublicIpAddress": {
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Default": "false",
+      "Description": "Whether to give each Gluster node a public IP address (not normally required)",
       "Type": "String"
     },
     "BackupBucketName": {
@@ -314,6 +315,12 @@
       "MaxValue": "9",
       "MinValue": "1",
       "Type": "Number"
+    },
+    "GlusterReleasePkg": {
+      "AllowedPattern": "^.*-release-gluster[0-9].*$",
+      "Default": "centos-release-gluster5",
+      "Description": "Name of the gluster repository-definition RPM containing the desired GlusterFS packages",
+      "Type": "String"
     },
     "InstanceRoleName": {
       "Default": "",
@@ -423,6 +430,15 @@
       "Description": "(Optional) Colon-separated list of domain users that should have admin permissions on the EC2 instance",
       "Type": "String"
     },
+    "WatchmakerAvailable": {
+      "AllowedValues": [
+        "false",
+        "true"
+      ],
+      "Default": "true",
+      "Description": "Specify if Watchmaker is available (if \"false\" all other Watchmaker-related parms will be ignored).",
+      "Type": "String"
+    },
     "WatchmakerComputerName": {
       "Default": "",
       "Description": "(Optional) Sets the hostname/computername within the OS",
@@ -489,7 +505,7 @@
         "Tags": [
           {
             "Key": "Name",
-            "PropagateAtLaunch": "true",
+            "PropagateAtLaunch": true,
             "Value": {
               "Fn::Join": [
                 "-",
@@ -548,6 +564,7 @@
           },
           "configSets": {
             "init": [
+              "setup",
               {
                 "Fn::If": [
                   "UseAdminPubkeyURL",
@@ -562,18 +579,23 @@
                   { "Ref": "AWS::NoValue" }
                 ]
               },
-              "watchmaker-install",
-              "watchmaker-launch",
-              "installGlusterd",
-              "startGlusterd"
-            ],
-            "makeNode": [
               {
-                "ConfigSet": "init"
+                "Fn::If": [
+                  "UseWatchmaker",
+                  [
+                    "watchmaker-install",
+                    "watchmaker-launch"
+                  ],
+                  { "Ref": "AWS::NoValue" }
+                ]
               },
+              "installGlusterRelease",
+              "startGlusterd",
               "GlusterSetup",
               "makeBrick",
-              "makeVolume"
+              "makeVolume",
+              "finalize",
+              "reboot"
             ]
           },
           "cw-agent-install": {
@@ -724,6 +746,54 @@
               }
             }
           },
+          "finalize": {
+            "commands": {
+              "10-signal-success": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "/opt/aws/bin/cfn-signal -e 0",
+                      " --stack ",
+                      { "Ref": "AWS::StackName" },
+                      " --resource NodeFleet",
+                      {
+                        "Fn::If": [
+                          "AssignInstanceRole",
+                          {
+                            "Fn::Join": [
+                              "",
+                              [
+                                " --role ",
+                                { "Ref": "InstanceRoleName" }
+                              ]
+                            ]
+                          },
+                          ""
+                        ]
+                      },
+                      {
+                        "Fn::Join": [
+                          "",
+                          [
+                            " --url ",
+                            "https://cloudformation.",
+                            { "Ref": "AWS::Region" },
+                            ".",
+                            { "Ref": "AWS::URLSuffix" }
+                          ]
+                        ]
+                      },
+                      " --region ",
+                      { "Ref": "AWS::Region" },
+                      "\n"
+                    ]
+                  ]
+                },
+                "ignoreErrors": "true"
+              }
+            }
+          },
           "GlusterEnvs": {
             "files": {
               "/etc/cfn/Gluster.envs": {
@@ -801,6 +871,8 @@
                       "   gluster peer probe ${HOST} || err_exit \"Peer-probe failed for ${HOST}\"\n",
                       "done\n",
                       "\n",
+                      "sleep 15\n",
+                      "\n",
                       "# Create a replicated volume\n",
                       "printf \"Attempting to create %s... \" \"${VOLNAME}\"\n",
                       "if [[ $(gluster volume info \"${VOLNAME}\" > /dev/null 2>&1 )$? -eq 0 ]]\n",
@@ -823,10 +895,19 @@
               }
             }
           },
-          "installGlusterd": {
-            "packages": {
-              "yum": {
-                "centos-release-gluster41": []
+          "installGlusterRelease": {
+            "commands": {
+              "00-AddGlusterReleas": {
+                "command": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "yum install -y ",
+                      { "Ref": "GlusterReleasePkg" },
+                       "\n"
+                    ]
+                  ]
+                }
               }
             }
           },
@@ -993,6 +1074,118 @@
               }
             }
           },
+          "reboot": {
+            "commands": {
+              "10-reboot": {
+                "command": "shutdown -r +2 \"Rebooting so all config-options take effect...\" &"
+              }
+            }
+          },
+          "setup": {
+            "files": {
+              "/etc/cfn/cfn-hup.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[main]\n",
+                      "stack=",
+                      { "Ref": "AWS::StackId" },
+                      "\n",
+                      "region=",
+                      { "Ref": "AWS::Region" },
+                      "\n",
+                      {
+                        "Fn::If": [
+                          "AssignInstanceRole",
+                          {
+                            "Fn::Join": [
+                              "",
+                              [
+                                "role=",
+                                { "Ref": "InstanceRoleName" },
+                                "\n"
+                              ]
+                            ]
+                          },
+                          ""
+                        ]
+                      },
+                      {
+                        "Fn::Join": [
+                          "",
+                          [
+                            "url=",
+                            "https://cloudformation.",
+                            { "Ref": "AWS::Region" },
+                            ".",
+                            { "Ref": "AWS::URLSuffix" }
+                          ]
+                        ]
+                      },
+                      "interval=1",
+                      "\n",
+                      "verbose=true",
+                      "\n"
+                    ]
+                  ]
+                },
+                "group": "root",
+                "mode": "000400",
+                "owner": "root"
+              },
+              "/etc/cfn/hooks.d/cfn-auto-reloader.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[cfn-auto-reloader-hook]\n",
+                      "triggers=post.update\n",
+                      "path=Resources.NodeLaunchConfig.Metadata\n",
+                      "action=/opt/aws/bin/cfn-init -v -c update",
+                      " --stack ",
+                      { "Ref": "AWS::StackName" },
+                      " --resource NodeLaunchConfig",
+                      {
+                        "Fn::If": [
+                          "AssignInstanceRole",
+                          {
+                            "Fn::Join": [
+                              "",
+                              [
+                                " --role ",
+                                { "Ref": "InstanceRoleName" }
+                              ]
+                            ]
+                          },
+                          ""
+                        ]
+                      },
+                      {
+                        "Fn::Join": [
+                          "",
+                          [
+                            " --url ",
+                            "https://cloudformation.",
+                            { "Ref": "AWS::Region" },
+                            ".",
+                            { "Ref": "AWS::URLSuffix" }
+                          ]
+                        ]
+                      },
+                      " --region ",
+                      { "Ref": "AWS::Region" },
+                      "\n",
+                      "runas=root\n"
+                    ]
+                  ]
+                },
+                "group": "root",
+                "mode": "000400",
+                "owner": "root"
+              }
+            }
+          },
           "startGlusterd": {
             "packages": {
               "yum": {
@@ -1153,7 +1346,7 @@
         }
       },
       "Properties": {
-        "AssociatePublicIpAddress": "false",
+        "AssociatePublicIpAddress": { "Ref": "AssociatePublicIpAddress" },
         "BlockDeviceMappings": [
           {
             "DeviceName": "/dev/sda1",
@@ -1184,7 +1377,7 @@
               ]
             },
             "Ebs": {
-              "DeleteOnTermination": "true",
+              "DeleteOnTermination": true,
               "VolumeSize": { "Ref": "SharedVolumeSize" },
               "VolumeType": { "Ref": "SharedVolumeType" }
             }
@@ -1194,11 +1387,11 @@
           "Fn::If": [
             "AssignInstanceRole",
             { "Ref": "InstanceRoleProfile" },
-            { "Ref": "PowerUserProfile" }
+            { "Ref": "AWS::NoValue" }
           ]
         },
         "ImageId": { "Ref": "AmiId" },
-        "InstanceMonitoring": "false",
+        "InstanceMonitoring": true,
         "InstanceType": { "Ref": "InstanceType" },
         "KeyName": {
           "Fn::If": [
@@ -1243,10 +1436,43 @@
                 "\n",
                 "#!/bin/bash -xe\n",
                 "\n",
+                {
+                  "Fn::If": [
+                    "UseComputerName",
+                    {
+                      "Fn::Join": [
+                        "",
+                        [
+                          "# Override DCHP-set hostname\n",
+                          "hostnamectl set-hostname $( echo ",
+                          { "Ref": "WatchmakerComputerName" },
+                          "| sed \"s/",
+                          {
+                            "Fn::Select": [
+                              "0",
+                              {
+                                "Fn::Split": [
+                                  ".",
+                                  { "Ref": "WatchmakerComputerName" }
+                                ]
+                              }
+                            ]
+                          },
+                          "/&-$( printf '%02x' $( hostname -i | sed 's/\\./ /g') )/\" )\n",
+                          "\n"
+                        ]
+                      ]
+                    },
+                    ""
+                  ]
+                },
                 "# Populate /etc/hosts with local hotname\n",
-                "printf \"%s\\t%s %s\\n\" \n",
-                "\"$( hostname -I )\" \"$( hostname -f )\" \n",
+                "printf \"%s\\t%s %s\\n\" \\\n",
+                "\"$( hostname -I )\" \"$( hostname -f )\" \\\n",
                 "\"$( hostname -s )\" >> /etc/hosts\n",
+                "\n",
+                "# Deactivate IPv6 references in /etc/hosts\n",
+                "sed -i '/^:/s/^/## /' /etc/hosts\n",
                 "\n",
                 "# Extend any available LVM PVs\n",
                 "if [[ -x $( which pvs ) ]]\n",
@@ -1288,9 +1514,37 @@
                 "}\n",
                 "\n",
                 "# Install packages\n",
-                "/opt/aws/bin/cfn-init -v -s ",
+                "/opt/aws/bin/cfn-init -v -c init",
+                " --stack ",
                 { "Ref": "AWS::StackId" },
-                " -r NodeLaunchConfig -c makeNode",
+                " --resource NodeLaunchConfig",
+                {
+                  "Fn::If": [
+                    "AssignInstanceRole",
+                    {
+                      "Fn::Join": [
+                        "",
+                        [
+                          " --role ",
+                          { "Ref": "InstanceRoleName" }
+                        ]
+                      ]
+                    },
+                    ""
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                      "",
+                      [
+                        " --url ",
+                        "https://cloudformation.",
+                        { "Ref": "AWS::Region" },
+                        ".",
+                        { "Ref": "AWS::URLSuffix" }
+                      ]
+                    ]
+                },
                 "  --region ",
                 { "Ref": "AWS::Region" },
                 " || error_exit 'Failed to run cfn-init'\n",
@@ -1298,10 +1552,6 @@
                 "/opt/aws/bin/cfn-signal -e 0 '",
                 { "Ref": "NodeWaitHandle" },
                 "'\n",
-                "\n",
-                "# Rebooting so all config-options take effect\n",
-                "echo \"Rebooting so all config-options take effect...\"\n",
-                "systemctl reboot\n",
                 "\n",
                 "--===============3585321300151562773==--"
               ]
@@ -1343,61 +1593,6 @@
     },
     "NodeWaitHandle": {
       "Type": "AWS::CloudFormation::WaitConditionHandle"
-    },
-    "PowerUserProfile": {
-      "Condition": "CreateIam",
-      "Properties": {
-        "Path": "/",
-        "Roles": [
-          { "Ref": "PowerUserRole" }
-        ]
-      },
-      "Type": "AWS::IAM::InstanceProfile"
-    },
-    "PowerUserRole": {
-      "Condition": "CreateIam",
-      "Properties": {
-        "AssumeRolePolicyDocument": {
-          "Statement": [
-            {
-              "Action": [
-                "sts:AssumeRole"
-              ],
-              "Effect": "Allow",
-              "Principal": {
-                "Service": [
-                  {
-                    "Fn::Join": [
-                      ".",
-                      [
-                        "ec2",
-                        { "Ref": "AWS::URLSuffix" }
-                      ]
-                    ]
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "Path": "/",
-        "Policies": [
-          {
-            "PolicyDocument": {
-              "Statement": [
-                {
-                  "Effect": "Allow",
-                  "NotAction": "iam:*",
-                  "Resource": "*",
-                  "Sid": "PowerUserStmt"
-                }
-              ]
-            },
-            "PolicyName": "PowerUserPolicy"
-          }
-        ]
-      },
-      "Type": "AWS::IAM::Role"
     }
   }
 }
